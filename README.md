@@ -1,5 +1,7 @@
 # Gait Lab · CatWalk Analyzer
 
+**Version 1.1.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+
 A web app that turns **CatWalk XT** (Noldus) gait-analysis exports into structured graphs, statistics and a written phenotype summary, with a built-in tutorial on how CatWalk works and how its parameters change in models of neurological disease.
 
 It runs in any modern browser on **phones, tablets and desktops**, and can be installed as an app (Add to Home Screen / Install app). It works offline once loaded. **All processing happens on your device; files are never uploaded.**
@@ -18,6 +20,7 @@ It runs in any modern browser on **phones, tablets and desktops**, and can be in
   - **Parameters**: per-paw dot plots with individual animals, mean ± SEM, stats tables and time courses.
   - **Over time**: effect-size progression across timepoints.
   - **Speed check** and **Data & export**: CSV of per-animal values and statistics, a Markdown summary, SVG/PNG charts, and print to PDF.
+- **GraphPad Prism export (.pzfx)**: per-animal values laid out as Prism data tables. Column tables group values side by side for each parameter and timepoint. Grouped tables are timepoints × groups, with animals as replicate subcolumns kept in the same position at every timepoint, so repeated-measures two-way ANOVA or mixed-effects analysis runs directly. The file opens in Prism 5–10 via File → Open.
 
 **Learn**: how CatWalk works (illuminated-footprint technology, runs, compliance), running a good experiment (including longitudinal/gene-therapy designs), anatomy of a step, paw prints and weight bearing, interlimb coordination, support and base of support, why speed matters, gait signatures of disease models (SCI, pain/nerve injury, parkinsonism, HD, stroke, ALS, ataxia) with PubMed-verified references, and a searchable parameter glossary.
 
@@ -36,6 +39,15 @@ npm run build      # production build in dist/
 ```
 
 Stack: React + TypeScript + Vite, `read-excel-file` and `papaparse` for parsing, hand-written SVG charts and statistics (no server).
+
+## Versioning
+
+The app follows [Semantic Versioning](https://semver.org/). To release a new version:
+
+1. Bump `version` in `package.json`. The app reads it at build time and shows it in the footer.
+2. Add a matching `## [x.y.z] - YYYY-MM-DD` entry at the top of `CHANGELOG.md`.
+
+A unit test checks that the latest changelog entry matches `package.json`.
 
 ## Deployment
 

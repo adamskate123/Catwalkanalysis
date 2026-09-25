@@ -3,14 +3,18 @@ import { Loader } from './components/Loader'
 import { Results } from './components/Results'
 import { Learn } from './components/Learn'
 import { Logo } from './components/Logo'
+import { Changelog } from './components/Changelog'
+import { APP_VERSION } from './version'
 import { mergeTables, type ParsedTable } from './lib/parse'
 import { aggregate, analyse, autoConfig, buildMeasures, type AnalysisConfig } from './lib/analysis'
 import { useChartTheme } from './lib/theme'
 
-type View = 'analyze' | 'learn'
+type View = 'analyze' | 'learn' | 'changes'
 
 function initialView(): View {
-  return location.hash.startsWith('#learn') ? 'learn' : 'analyze'
+  if (location.hash.startsWith('#learn')) return 'learn'
+  if (location.hash === '#changes') return 'changes'
+  return 'analyze'
 }
 
 export default function App() {
@@ -46,7 +50,7 @@ export default function App() {
 
   const go = (v: View, anchor?: string) => {
     setView(v)
-    const hash = v === 'learn' ? `#learn${anchor ? '-' + anchor : ''}` : ''
+    const hash = v === 'learn' ? `#learn${anchor ? '-' + anchor : ''}` : v === 'changes' ? '#changes' : ''
     history.replaceState(null, '', hash || location.pathname)
     if (anchor) setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth' }), 50)
     else window.scrollTo({ top: 0 })
@@ -92,7 +96,9 @@ export default function App() {
         </div>
       </header>
       <main>
-        {view === 'learn' ? (
+        {view === 'changes' ? (
+          <Changelog />
+        ) : view === 'learn' ? (
           <Learn onAnalyze={() => go('analyze')} />
         ) : ds && cfg && agg && results ? (
           <Results
@@ -111,6 +117,10 @@ export default function App() {
         )}
       </main>
       <footer className="app-footer">
+        <button className="btn ghost sm" style={{ padding: 0, minHeight: 0 }} onClick={() => go('changes')}>
+          Gait Lab v{APP_VERSION} · What's new
+        </button>
+        <br />
         All processing happens on this device; your files are never uploaded. For research use; automated interpretations are not diagnoses.
       </footer>
     </>
