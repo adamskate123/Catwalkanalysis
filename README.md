@@ -1,6 +1,6 @@
 # Gait Lab · CatWalk Analyzer
 
-**Version 1.2.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 1.3.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
 A web app that turns **CatWalk XT** (Noldus) gait-analysis exports into structured graphs, statistics and a written phenotype summary, with a built-in tutorial on how CatWalk works and how its parameters change in models of neurological disease.
 
@@ -25,6 +25,15 @@ It runs in any modern browser on **phones, tablets and desktops**, and can be in
 - **GraphPad Prism export (.pzfx)**: per-animal values laid out as Prism data tables. Column tables group values side by side for each parameter and timepoint. Grouped tables are timepoints × groups, with animals as replicate subcolumns kept in the same position at every timepoint, so repeated-measures two-way ANOVA or mixed-effects analysis runs directly. The file opens in Prism 5–10 via File → Open.
 
 **Learn**: how CatWalk works (illuminated-footprint technology, runs, compliance), running a good experiment (including longitudinal/gene-therapy designs), anatomy of a step, paw prints and weight bearing, interlimb coordination, support and base of support, why speed matters, gait signatures of disease models (SCI, pain/nerve injury, parkinsonism, HD, stroke, ALS, ataxia) with PubMed-verified references, and a searchable parameter glossary.
+
+## Serial experiments
+
+Each analysis is saved as an **experiment** on your device and can grow over time:
+
+1. Load your first CatWalk export (and animal key). An experiment is created and saved automatically.
+2. Later, open it from the start screen and choose **+ Add data** to add new or updated exports. Repeated rows replace the old copy, new animals and timepoints are added, and your settings are kept.
+3. If CatWalk's Time_Point is left as "Undefined", give each added file a **session label** (e.g. "Week 8") to build a longitudinal dataset.
+4. **Export a backup** (`.gaitlab.json`) after each session. Storage is per browser and per device, and some browsers, notably iOS Safari for sites not added to the Home Screen, can clear it. Drop a backup on the start screen to restore it on any device.
 
 ## Exporting from CatWalk XT
 

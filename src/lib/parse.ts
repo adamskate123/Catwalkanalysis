@@ -281,9 +281,37 @@ export function mergeTables(tables: ParsedTable[]): Dataset {
     }
   }
 
+  // Updated exports usually repeat earlier rows. A later row with the same
+  // experiment/animal/trial/timepoint/session/run replaces the earlier one.
+  const idCols = headers
+    .map((h, i) => ({ h, i, role: metaRole(h) }))
+    .filter(({ h, role }) => /^experiment$/i.test(h.trim()) || role === 'subject' || role === 'trial' || role === 'run' || (role === 'time' && !/description/i.test(h)))
+  let replaced = 0
+  if (idCols.some((c) => c.role === 'subject' || c.role === 'trial')) {
+    const seen = new Map<string, number>()
+    const keep: boolean[] = rows.map(() => true)
+    rows.forEach((r, i) => {
+      const id = idCols.map(({ i: c }) => norm(r[c])).join('\u0000')
+      const prev = seen.get(id)
+      if (prev !== undefined) {
+        keep[prev] = false
+        replaced++
+      }
+      seen.set(id, i)
+    })
+    if (replaced) {
+      const kept = rows.filter((_, i) => keep[i])
+      rows.length = 0
+      rows.push(...kept)
+      notices.push(
+        `${replaced} row${replaced === 1 ? '' : 's'} appeared in more than one file (same animal, trial, timepoint and run); the most recently added version was used.`,
+      )
+    }
+  }
+
   const keys: KeyJoin[] = []
   const keyCols = new Set<string>()
-  for (const kt of keyTables) {
+  for (const kt of mergeKeyTables(keyTables)) {
     const j = joinKey(headers, rows, kt)
     if (!j) continue
     keys.push(j.info)
@@ -292,6 +320,15 @@ export function mergeTables(tables: ParsedTable[]): Dataset {
     rows.forEach((r, i) => r.push(...j.values[i]))
   }
   return { headers, rows, columns: classifyColumns(headers, rows, keyCols), sources, keys, notices }
+}
+
+/** Combines several animal-key sheets (e.g. an original and an updated key) into one. */
+function mergeKeyTables(tables: ParsedTable[]): ParsedTable[] {
+  if (tables.length < 2) return tables
+  const headers: string[] = []
+  for (const t of tables) for (const h of t.headers) if (!headers.includes(h)) headers.push(h)
+  const rows = tables.flatMap((t) => t.rows.map((r) => headers.map((h) => (t.headers.includes(h) ? r[t.headers.indexOf(h)] : null))))
+  return [{ file: tables.map((t) => t.file).filter((f, i, a) => a.indexOf(f) === i).join(' + '), sheet: '', headerRow: 0, headers, rows }]
 }
 
 /**
@@ -317,7 +354,8 @@ function joinKey(headers: string[], rows: Cell[][], kt: ParsedTable): { info: Ke
   for (const r of kt.rows) {
     const k = norm(r[kc])
     const filled = r.filter((c) => c !== null)
-    if (k && !lookup.has(k) && filled.length > 1) lookup.set(k, r)
+    // Later rows win, so an updated key overrides an older one.
+    if (k && filled.length > 1) lookup.set(k, r)
     // Free-text rows below the table (e.g. "Notes", then sentences) are kept as notes.
     else if (filled.length === 1 && typeof filled[0] === 'string' && filled[0].length > 20) notes.push(filled[0])
   }

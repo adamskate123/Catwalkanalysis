@@ -3,6 +3,24 @@
 All notable changes to Gait Lab (CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-09-26
+
+### Added
+
+- **Saved experiments for serial studies.** Every analysis is now an experiment saved on the device (files, settings and thresholds). The start screen lists your experiments to reopen or delete.
+- **Add data over time** (header → *+ Add data*, or the *Experiment & data* tab): add new CatWalk exports, updated re-exports and updated animal keys to an existing experiment.
+  - Rows that appear again (same experiment, animal, trial, timepoint/session and run) replace the earlier copy, so re-exporting the whole CatWalk experiment each time is safe.
+  - New animals, groups and timepoints join the analysis, and your settings, group order and timepoint order are kept.
+  - After adding, a summary reports new rows, new animals, new timepoints, and which key columns were joined.
+- **Session labels**: tag the files you add (e.g. "Week 8") when CatWalk's Time_Point is "Undefined". The labels become the timepoints for longitudinal views and Prism grouped tables, and can be edited later.
+- **Backups**: export an experiment to a `.gaitlab.json` file and restore it on any device by dropping it on the start screen.
+- Experiment name and notes; file list with removal and per-file session labels.
+
+### Changed
+
+- When several CatWalk experiments are combined and their Animal IDs are CatWalk's generic numbers (Animal0001…, which restart in each experiment), the trial name is used to identify animals.
+- Newer animal-key entries override older ones for the same animal.
+
 ## [1.2.0] - 2026-09-26
 
 Tested against real CatWalk XT 10 Run Statistics and Trial Statistics exports.
@@ -60,6 +78,7 @@ Tested against real CatWalk XT 10 Run Statistics and Trial Statistics exports.
 - Tutorial: how CatWalk works, experimental design, gait-cycle, paw-print, coordination and support concepts, why speed matters, gait signatures of disease models with PubMed-verified references, and a searchable parameter glossary.
 - Demo dataset (simulated gene-therapy study) and a GitHub Pages deployment workflow.
 
+[1.3.0]: https://github.com/adamskate123/Catwalkanalysis/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/adamskate123/Catwalkanalysis/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/adamskate123/Catwalkanalysis/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/adamskate123/Catwalkanalysis/releases/tag/v1.0.0

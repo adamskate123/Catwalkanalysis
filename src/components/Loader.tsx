@@ -1,52 +1,51 @@
 import { useRef, useState } from 'react'
-import { pickTables, readFile, type ParsedTable } from '../lib/parse'
+import { pickTables } from '../lib/parse'
 import { demoSheet, sheetToCsv } from '../lib/demo'
 import { download } from '../lib/export'
 import { matchColumn } from '../lib/catalog'
+import type { ExperimentSummary } from '../lib/experiment'
+import { isBackupFile, readSpreadsheets, type LoadedFile } from '../lib/readFiles'
 import { WalkwayDiagram } from './diagrams'
 
 interface Props {
-  onLoaded: (tables: ParsedTable[]) => void
+  onLoaded: (files: LoadedFile[]) => void
   onLearn: () => void
+  experiments: ExperimentSummary[]
+  onOpen: (id: string) => void
+  onDelete: (id: string) => void
+  onImport: (file: File) => Promise<void>
 }
 
-interface Loaded {
-  name: string
-  tables: ParsedTable[]
+function when(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export function Loader({ onLoaded, onLearn }: Props) {
-  const [files, setFiles] = useState<Loaded[]>([])
-  const [errors, setErrors] = useState<string[]>([])
+export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImport }: Props) {
+  const [files, setFiles] = useState<LoadedFile[]>([])
+  const [errors, setErrors] = useState<{ text: string; level: 'info' | 'warning' }[]>([])
   const [busy, setBusy] = useState(false)
   const [over, setOver] = useState(false)
   const input = useRef<HTMLInputElement>(null)
 
   const addFiles = async (list: FileList | File[]) => {
     setBusy(true)
-    const errs: string[] = []
-    const added: Loaded[] = []
-    for (const f of Array.from(list)) {
+    const all = Array.from(list)
+    const msgs: { text: string; level: 'info' | 'warning' }[] = []
+    for (const b of all.filter(isBackupFile)) {
       try {
-        const sheets = await readFile(f)
-        const tables = pickTables(sheets)
-        if (!tables.length || !tables.some((t) => t.rows.length)) throw new Error(`${f.name}: no data rows found.`)
-        const recognised = tables.reduce((s, t) => s + t.headers.filter((h) => matchColumn(h)).length, 0)
-        if (recognised < 3)
-          errs.push(
-            `${f.name}: no CatWalk parameters found, so it will be used as an animal key. Its columns (e.g. genotype, sex, age) are joined to the gait data through a matching ID column such as the trial name.`,
-          )
-        added.push({ name: f.name, tables })
+        await onImport(b)
       } catch (e) {
-        errs.push(e instanceof Error ? e.message : `${f.name}: could not be read.`)
+        msgs.push({ level: 'warning', text: e instanceof Error ? e.message : `${b.name}: could not be imported.` })
       }
     }
+    const { files: added, messages } = await readSpreadsheets(all.filter((f) => !isBackupFile(f)))
     setFiles((prev) => [...prev, ...added])
-    setErrors(errs)
+    setErrors([...msgs, ...messages])
     setBusy(false)
   }
 
-  const analyse = () => onLoaded(files.flatMap((f) => f.tables))
+  const analyse = () => onLoaded(files)
 
   return (
     <>
@@ -58,7 +57,7 @@ export function Loader({ onLoaded, onLearn }: Props) {
             and timepoints, and points out patterns linked to specific kinds of neurological deficit.
           </p>
           <div className="row">
-            <button className="btn primary" onClick={() => onLoaded(pickTables([demoSheet()]))}>
+            <button className="btn primary" onClick={() => onLoaded([{ name: 'Demo data (simulated)', tables: pickTables([demoSheet()]), isKey: false }])}>
               Try with demo data
             </button>
             <button className="btn" onClick={onLearn}>
@@ -74,8 +73,42 @@ export function Loader({ onLoaded, onLearn }: Props) {
         </figure>
       </section>
 
+      {experiments.length > 0 && (
+        <div className="card">
+          <h2>Your experiments</h2>
+          <p className="small muted">Saved on this device. Open one to see its results or add new data.</p>
+          <ul className="file-list">
+            {experiments.map((e) => (
+              <li key={e.id}>
+                <span>
+                  <b>{e.name}</b>
+                  <span className="muted">
+                    {' '}
+                    · {e.files} file{e.files === 1 ? '' : 's'}, {e.rows} rows · updated {when(e.updatedAt)}
+                  </span>
+                </span>
+                <span className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                  <button className="btn sm primary" onClick={() => onOpen(e.id)}>
+                    Open
+                  </button>
+                  <button
+                    className="btn sm ghost"
+                    aria-label={`Delete ${e.name}`}
+                    onClick={() => {
+                      if (confirm(`Delete "${e.name}" from this device? Export a backup first if you may need it again.`)) onDelete(e.id)
+                    }}
+                  >
+                    Delete
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="card">
-        <h2>Load your files</h2>
+        <h2>{experiments.length ? 'Start a new experiment' : 'Load your files'}</h2>
         <div
           className={`drop${over ? ' over' : ''}`}
           role="button"
@@ -97,7 +130,7 @@ export function Loader({ onLoaded, onLearn }: Props) {
             ref={input}
             type="file"
             multiple
-            accept=".xlsx,.xlsm,.csv,.txt,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain"
+            accept=".xlsx,.xlsm,.csv,.txt,.tsv,.json,.gaitlab,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain"
             onChange={(e) => {
               if (e.target.files?.length) addFiles(e.target.files)
               e.target.value = ''
@@ -105,13 +138,14 @@ export function Loader({ onLoaded, onLearn }: Props) {
           />
           <p style={{ fontWeight: 600, marginBottom: 4 }}>{busy ? 'Reading…' : 'Drop files here or tap to choose'}</p>
           <p className="muted small" style={{ margin: 0 }}>
-            Excel (.xlsx) or text (.csv, .txt, .tsv). Add several files to combine cohorts or timepoints.
+            Excel (.xlsx) or text (.csv, .txt, .tsv). Add several files to combine cohorts or timepoints, or drop a Gait Lab backup (.gaitlab.json) to
+            restore a saved experiment.
           </p>
         </div>
         {errors.map((e) => (
-          <div key={e} className={`notice${e.includes('animal key') ? '' : ' warning'}`} style={{ marginTop: 10 }}>
-            <span className="ic">{e.includes('animal key') ? 'i' : '!'}</span>
-            <span>{e}</span>
+          <div key={e.text} className={`notice${e.level === 'warning' ? ' warning' : ''}`} style={{ marginTop: 10 }}>
+            <span className="ic">{e.level === 'warning' ? '!' : 'i'}</span>
+            <span>{e.text}</span>
           </div>
         ))}
         {files.length > 0 && (
@@ -125,7 +159,7 @@ export function Loader({ onLoaded, onLearn }: Props) {
                       {' '}
                       · {f.tables.reduce((s, t) => s + t.rows.length, 0)} rows
                       {f.tables.length > 1 ? ` from ${f.tables.length} sheets` : ''} ·{' '}
-                      {(f.tables[0]?.headers.filter((h) => matchColumn(h)).length ?? 0) < 3
+                      {f.isKey
                         ? 'animal key'
                         : `${f.tables[0]?.headers.filter((h) => matchColumn(h)).length} parameters recognised`}
                     </span>
@@ -140,6 +174,7 @@ export function Loader({ onLoaded, onLearn }: Props) {
               <button className="btn primary" onClick={analyse}>
                 Analyze {files.length} file{files.length > 1 ? 's' : ''}
               </button>
+              <span className="small muted">A new experiment is created and saved on this device; you can add more data to it later.</span>
             </div>
           </>
         )}

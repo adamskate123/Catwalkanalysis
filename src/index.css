@@ -852,3 +852,32 @@ footer.app-footer {
 .changelog li {
   margin-bottom: 4px;
 }
+
+.exp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.exp-title {
+  font-size: 1.3rem;
+  margin: 0 0 2px;
+  overflow-wrap: anywhere;
+}
+.save-error {
+  color: #d03b3b;
+  font-weight: 600;
+}
+.file-list li.dim {
+  opacity: 0.6;
+}
+.file-list li > .btn,
+.file-list li > .row {
+  flex: none;
+  white-space: nowrap;
+}
+.file-list li > span:first-child {
+  min-width: 0;
+}

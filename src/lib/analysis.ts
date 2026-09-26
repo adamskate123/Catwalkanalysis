@@ -197,7 +197,15 @@ function controlsFromGroupType(ds: Dataset, groupCol: string | null): string[] {
 
 export function autoConfig(ds: Dataset): AnalysisConfig {
   const find = (role: string) => ds.columns.find((c) => c.meta === role)?.name ?? null
-  const subjectCol = find('subject') ?? find('trial')
+  let subjectCol = find('subject') ?? find('trial')
+  // CatWalk numbers animals (Animal0001…) per experiment, so when several CatWalk
+  // experiments are combined the trial name (usually the ear tag) identifies animals.
+  const expCol = ds.headers.find((h) => /^experiment$/i.test(h.trim())) ?? null
+  const trialCol = find('trial')
+  if (subjectCol && trialCol && subjectCol !== trialCol && expCol && distinctValues(ds, expCol).length > 1) {
+    const ids = distinctValues(ds, subjectCol)
+    if (ids.length && ids.every((v) => /^animal\s*\d+$/i.test(v))) subjectCol = trialCol
+  }
   let groupCol = find('group')
   if (!groupCol && ds.sources.length > 1) groupCol = SOURCE_COL
   // A time column is only useful with 2+ real timepoints (CatWalk writes "Undefined" when none were set).

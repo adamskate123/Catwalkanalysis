@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import type { AggregateResult, AnalysisConfig, Measure, TimeResults } from '../lib/analysis'
-import { DEFAULT_INTERPRET, type InterpretOptions } from '../lib/interpret'
+import type { InterpretOptions } from '../lib/interpret'
+import type { Experiment } from '../lib/experiment'
+import type { LoadedFile } from '../lib/readFiles'
+import { ExperimentTab } from './tabs/ExperimentTab'
 import type { Dataset } from '../lib/parse'
 import { seriesColor, type ChartTheme } from '../lib/theme'
 import { Setup } from './Setup'
@@ -17,6 +20,13 @@ interface Props {
   measures: Measure[]
   cfg: AnalysisConfig
   setCfg: (c: AnalysisConfig) => void
+  opt: InterpretOptions
+  setOpt: (o: InterpretOptions) => void
+  experiment: Experiment
+  saveState: 'saved' | 'saving' | 'error' | 'off'
+  onUpdateExperiment: (e: Experiment) => void
+  onAddFiles: (files: LoadedFile[], session?: string) => string
+  onDeleteExperiment: () => void
   agg: AggregateResult
   results: TimeResults[]
   theme: ChartTheme
@@ -24,12 +34,11 @@ interface Props {
   onLearn: (anchor?: string) => void
 }
 
-type Tab = 'summary' | 'fingerprint' | 'explore' | 'time' | 'speed' | 'data' | 'setup'
+type Tab = 'summary' | 'fingerprint' | 'explore' | 'time' | 'speed' | 'data' | 'setup' | 'experiment'
 
 export function Results(props: Props) {
-  const { ds, measures, cfg, setCfg, agg, results, theme, onReset, onLearn } = props
+  const { ds, measures, cfg, setCfg, opt, setOpt, agg, results, theme, onReset, onLearn, experiment, saveState } = props
   const [tab, setTab] = useState<Tab>('summary')
-  const [opt, setOpt] = useState<InterpretOptions>(DEFAULT_INTERPRET)
   const [timePick, setTime] = useState<string>(results[results.length - 1]?.time ?? '')
   const time = results.some((r) => r.time === timePick) ? timePick : (results[results.length - 1]?.time ?? '')
   const [measureKey, setMeasureKey] = useState<string | null>(null)
@@ -60,19 +69,31 @@ export function Results(props: Props) {
     ['speed', 'Speed check'],
     ['data', 'Data & export'],
     ['setup', 'Setup'],
+    ['experiment', 'Experiment & data'],
   ]
 
-  const showTimePicker = hasTime && tab !== 'time' && tab !== 'setup' && tab !== 'data'
+  const showTimePicker = hasTime && tab !== 'time' && tab !== 'setup' && tab !== 'data' && tab !== 'experiment'
 
   return (
     <>
-      <div className="row no-print" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-        <div className="small muted" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-          {ds.sources.join(' · ')} — {agg.subjects.length} animal-timepoints, {measures.length} parameters
+      <div className="exp-header no-print">
+        <div style={{ minWidth: 0 }}>
+          <h1 className="exp-title">{experiment.name.trim() || 'Untitled experiment'}</h1>
+          <div className="small muted" style={{ overflowWrap: 'anywhere' }}>
+            {experiment.files.length} file{experiment.files.length === 1 ? '' : 's'} · {agg.subjects.length} animal-timepoints · {measures.length} parameters ·{' '}
+            <span className={saveState === 'error' ? 'save-error' : undefined}>
+              {saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Not saved: storage unavailable' : 'Saved on this device'}
+            </span>
+          </div>
         </div>
-        <button className="btn sm" onClick={onReset}>
-          Load other files
-        </button>
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn sm primary" onClick={() => setTab('experiment')}>
+            + Add data
+          </button>
+          <button className="btn sm" onClick={onReset}>
+            All experiments
+          </button>
+        </div>
       </div>
       <div className="tabs" role="tablist">
         {tabs.map(([id, label]) => (
@@ -97,6 +118,15 @@ export function Results(props: Props) {
       {tab === 'time' && <TimeTab {...tabProps} />}
       {tab === 'speed' && <SpeedTab {...tabProps} goSetup={() => setTab('setup')} />}
       {tab === 'data' && <DataTab {...tabProps} />}
+      {tab === 'experiment' && (
+        <ExperimentTab
+          experiment={experiment}
+          ds={ds}
+          onUpdate={props.onUpdateExperiment}
+          onAddFiles={props.onAddFiles}
+          onDelete={props.onDeleteExperiment}
+        />
+      )}
       {tab === 'setup' && <Setup ds={ds} measures={measures} cfg={cfg} setCfg={setCfg} opt={opt} setOpt={setOpt} colorOf={colorOf} onLearn={onLearn} />}
     </>
   )
