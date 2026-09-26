@@ -1,4 +1,4 @@
-import { distinctValues, groupDefaults, type AnalysisConfig, type Measure } from '../lib/analysis'
+import { DEFAULT_MAX_VARIATION, distinctValues, groupDefaults, type AnalysisConfig, type Measure } from '../lib/analysis'
 import { CATEGORY_LABELS, CATEGORY_ORDER } from '../lib/catalog'
 import type { InterpretOptions } from '../lib/interpret'
 import type { Dataset } from '../lib/parse'
@@ -75,6 +75,112 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
           </label>
         )}
       </div>
+
+      {ds.keys.length > 0 && (
+        <div className="card">
+          <h2>Animal key</h2>
+          {ds.keys.map((k) => (
+            <div key={k.file} className="small">
+              <p style={{ marginBottom: 6 }}>
+                <b>{k.file}</b> was joined on <b>{k.dataColumn}</b> = <b>{k.keyColumn}</b>: {k.matchedIds} animals matched. Added columns:{' '}
+                {k.added.join(', ')}.
+              </p>
+              {k.unmatchedData.length > 0 && <p className="muted">No key entry for: {k.unmatchedData.join(', ')}.</p>}
+              {k.unusedKeyIds.length > 0 && <p className="muted">Key entries not found in the data: {k.unusedKeyIds.join(', ')}.</p>}
+              {k.notes.length > 0 && (
+                <ul style={{ paddingLeft: 18 }}>
+                  {k.notes.map((n) => (
+                    <li key={n}>{n}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+          <p className="small muted" style={{ marginBottom: 0 }}>Key columns can be used as the group column or as filters below.</p>
+        </div>
+      )}
+
+      <div className="card">
+        <h2>Filters</h2>
+        <p className="small muted">Restrict the analysis to a subset of animals, for example one sex.</p>
+        {cfg.filters.map((f, fi) => {
+          const vals = distinctValues(ds, f.col)
+          return (
+            <div key={f.col} style={{ marginBottom: 12 }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <b className="small">{f.col}</b>
+                <button className="btn ghost sm" onClick={() => update({ filters: cfg.filters.filter((_, j) => j !== fi) })}>
+                  Remove filter
+                </button>
+              </div>
+              <div className="chips" style={{ marginTop: 6 }}>
+                {vals.map((v) => (
+                  <label key={v} className="chip" style={{ cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={f.values.includes(v)}
+                      onChange={(e) => {
+                        const values = e.target.checked ? [...f.values, v] : f.values.filter((x) => x !== v)
+                        update({ filters: cfg.filters.map((x, j) => (j === fi ? { ...x, values } : x)) })
+                      }}
+                    />
+                    {v}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+        <label className="field" style={{ maxWidth: 360 }}>
+          Add a filter
+          <select
+            value=""
+            onChange={(e) => {
+              const col = e.target.value
+              if (col) update({ filters: [...cfg.filters, { col, values: distinctValues(ds, col) }] })
+            }}
+          >
+            <option value="">Choose a column…</option>
+            {ds.columns
+              .filter((c) => (c.meta || c.numericShare < 0.8) && c.distinct >= 2 && c.distinct <= 30 && !cfg.filters.some((f) => f.col === c.name))
+              .map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+          </select>
+        </label>
+      </div>
+
+      {measures.some((m) => m.def.id === 'speed_variation') && (
+        <div className="card">
+          <h2>Run quality</h2>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={cfg.maxVariation !== null}
+              onChange={(e) => update({ maxVariation: e.target.checked ? DEFAULT_MAX_VARIATION : null })}
+            />
+            <span>Exclude runs with high speed variation</span>
+          </label>
+          {cfg.maxVariation !== null && (
+            <label className="field" style={{ maxWidth: 260, marginTop: 10 }}>
+              Maximum speed variation allowed (%)
+              <input
+                type="number"
+                min={5}
+                max={500}
+                value={cfg.maxVariation}
+                onChange={(e) => update({ maxVariation: Math.max(1, Number(e.target.value) || DEFAULT_MAX_VARIATION) })}
+              />
+            </label>
+          )}
+          <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
+            Maximum variation is how far the animal's speed strayed from its average during the run. High values mean the animal stopped or hesitated; many labs
+            accept runs up to 50–60%. Applies to run-statistics files only (trial statistics have already averaged the runs).
+          </p>
+        </div>
+      )}
 
       {cfg.groupCol && (
         <div className="card">

@@ -11,7 +11,7 @@ function Md({ text }: { text: string }) {
 }
 
 export function Summary(props: TabProps & { goSetup: () => void }) {
-  const { agg, results, cfg, opt, time, openMeasure, onLearn, goSetup } = props
+  const { ds, agg, results, cfg, opt, time, openMeasure, onLearn, goSetup } = props
   const tr = results.find((r) => r.time === time) ?? results[0]
   const findings = useMemo(() => (tr ? interpret(tr, cfg, opt) : []), [tr, cfg, opt])
   const [copied, setCopied] = useState(false)
@@ -21,7 +21,7 @@ export function Summary(props: TabProps & { goSetup: () => void }) {
 
   const subs = agg.subjects.filter((s) => s.time === tr.time)
   const paras = narrative(agg, tr, cfg, opt, findings)
-  const warnings = dataWarnings(agg, tr, cfg)
+  const warnings = dataWarnings(agg, tr, cfg, ds)
   const top = topChanges(tr, cfg, opt, 12)
   const nSig = tr.results.filter((r) => {
     const c = primaryComparison(r, cfg)
@@ -59,7 +59,15 @@ export function Summary(props: TabProps & { goSetup: () => void }) {
         <div className="tile">
           <div className="label">Runs used</div>
           <div className="value">{agg.rowsUsed.toLocaleString()}</div>
-          <div className="sub">{agg.rowsNonCompliant ? `${agg.rowsNonCompliant} non-compliant excluded` : 'all timepoints'}</div>
+          <div className="sub">
+            {[
+              agg.rowsNonCompliant && `${agg.rowsNonCompliant} non-compliant`,
+              agg.rowsHighVariation && `${agg.rowsHighVariation} > ${cfg.maxVariation}% speed variation`,
+              agg.rowsFiltered && `${agg.rowsFiltered} filtered out`,
+            ]
+              .filter(Boolean)
+              .join(', ') + (agg.rowsNonCompliant || agg.rowsHighVariation || agg.rowsFiltered ? ' excluded' : 'of ' + agg.rowsTotal)}
+          </div>
         </div>
         <div className="tile">
           <div className="label">Parameters analysed</div>

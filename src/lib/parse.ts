@@ -24,6 +24,7 @@ export interface ColumnInfo {
   distinct: number
   match: ColumnMatch | null
   meta: MetaRole | null
+  fromKey?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -35,8 +36,11 @@ function normaliseCell(v: unknown): Cell {
   if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE'
   if (v instanceof Date) return v.toISOString().slice(0, 10)
   const s = String(v).trim()
-  return s === '' ? null : s
+  return s === '' || MISSING.test(s) ? null : s
 }
+
+/** Placeholders CatWalk and Excel use for "no value". */
+export const MISSING = /^(nan|n\/a|na|-|—|null|#n\/a|#div\/0!|#value!)$/i
 
 export async function readFile(file: File): Promise<RawSheet[]> {
   const name = file.name
@@ -80,7 +84,7 @@ export function readDelimited(text: string, name: string): RawSheet {
   const cells = res.data.map((row) =>
     row.map((raw): Cell => {
       const s = (raw ?? '').trim()
-      if (s === '') return null
+      if (s === '' || MISSING.test(s)) return null
       const num = parseNumber(s, commaDecimal)
       return num ?? s
     }),
@@ -205,16 +209,52 @@ export function pickTables(sheets: RawSheet[]): ParsedTable[] {
 // ---------------------------------------------------------------------------
 // Merging and column classification
 
+export interface KeyJoin {
+  file: string
+  keyColumn: string
+  dataColumn: string
+  added: string[]
+  matchedIds: number
+  unmatchedData: string[]
+  unusedKeyIds: string[]
+  notes: string[]
+}
+
 export interface Dataset {
   headers: string[]
   rows: Cell[][]
   columns: ColumnInfo[]
   sources: string[]
+  keys: KeyJoin[]
+  notices: string[]
 }
 
 export const SOURCE_COL = 'Source file'
 
+/** A table with (almost) no CatWalk parameters is treated as an animal key / metadata sheet. */
+export function isKeyTable(t: ParsedTable): boolean {
+  return t.headers.filter((h) => matchColumn(h)).length < 3
+}
+
+const norm = (c: Cell) => (c === null ? '' : String(c).trim().toLowerCase().replace(/\s+/g, ' '))
+
+const isTrialLevel = (t: ParsedTable) => t.headers.some((h) => metaRole(h) === 'nruns')
+const isRunLevel = (t: ParsedTable) => t.headers.some((h) => metaRole(h) === 'run')
+
 export function mergeTables(tables: ParsedTable[]): Dataset {
+  const notices: string[] = []
+  let dataTables = tables.filter((t) => !isKeyTable(t))
+  const keyTables = dataTables.length ? tables.filter(isKeyTable) : []
+  // Run and trial statistics describe the same animals; combining them would count animals twice.
+  if (dataTables.some(isRunLevel) && dataTables.some(isTrialLevel)) {
+    const skipped = dataTables.filter((t) => isTrialLevel(t) && !isRunLevel(t))
+    dataTables = dataTables.filter((t) => !skipped.includes(t))
+    notices.push(
+      `${skipped.map((t) => t.file).join(', ')} (trial statistics) was not combined with the run statistics, because both describe the same animals. The app averages the runs itself; load the trial-statistics file on its own to analyse CatWalk's own trial averages.`,
+    )
+  }
+  const main = dataTables.length ? dataTables : tables
+
   const headers: string[] = []
   const index = new Map<string, number>()
   const add = (h: string) => {
@@ -223,13 +263,13 @@ export function mergeTables(tables: ParsedTable[]): Dataset {
       headers.push(h)
     }
   }
-  const multi = tables.length > 1
+  const multi = main.length > 1
   if (multi) add(SOURCE_COL)
-  for (const t of tables) t.headers.forEach(add)
+  for (const t of main) t.headers.forEach(add)
   const rows: Cell[][] = []
   const sources: string[] = []
-  for (const t of tables) {
-    const label = t.sheet && tables.filter((x) => x.file === t.file).length > 1 ? `${t.file} › ${t.sheet}` : t.file
+  for (const t of main) {
+    const label = t.sheet && main.filter((x) => x.file === t.file).length > 1 ? `${t.file} › ${t.sheet}` : t.file
     sources.push(label)
     for (const r of t.rows) {
       const out: Cell[] = new Array(headers.length).fill(null)
@@ -240,10 +280,74 @@ export function mergeTables(tables: ParsedTable[]): Dataset {
       rows.push(out)
     }
   }
-  return { headers, rows, columns: classifyColumns(headers, rows), sources }
+
+  const keys: KeyJoin[] = []
+  const keyCols = new Set<string>()
+  for (const kt of keyTables) {
+    const j = joinKey(headers, rows, kt)
+    if (!j) continue
+    keys.push(j.info)
+    for (const h of j.info.added) keyCols.add(h)
+    headers.push(...j.info.added)
+    rows.forEach((r, i) => r.push(...j.values[i]))
+  }
+  return { headers, rows, columns: classifyColumns(headers, rows, keyCols), sources, keys, notices }
 }
 
-export function classifyColumns(headers: string[], rows: Cell[][]): ColumnInfo[] {
+/**
+ * Joins a key table to the data by the (key column, data column) pair whose
+ * values overlap most, e.g. "CatWalk trial name" ↔ "Trial".
+ */
+function joinKey(headers: string[], rows: Cell[][], kt: ParsedTable): { info: KeyJoin; values: Cell[][] } | null {
+  let best: { kc: number; dc: number; hits: number } | null = null
+  for (let kc = 0; kc < kt.headers.length; kc++) {
+    const kv = new Set(kt.rows.map((r) => norm(r[kc])).filter(Boolean))
+    if (kv.size < 3) continue
+    for (let dc = 0; dc < headers.length; dc++) {
+      const dv = new Set(rows.map((r) => norm(r[dc])).filter(Boolean))
+      let hits = 0
+      for (const v of dv) if (kv.has(v)) hits++
+      if (hits >= 2 && (!best || hits > best.hits)) best = { kc, dc, hits }
+    }
+  }
+  if (!best) return null
+  const { kc, dc } = best
+  const lookup = new Map<string, Cell[]>()
+  const notes: string[] = []
+  for (const r of kt.rows) {
+    const k = norm(r[kc])
+    const filled = r.filter((c) => c !== null)
+    if (k && !lookup.has(k) && filled.length > 1) lookup.set(k, r)
+    // Free-text rows below the table (e.g. "Notes", then sentences) are kept as notes.
+    else if (filled.length === 1 && typeof filled[0] === 'string' && filled[0].length > 20) notes.push(filled[0])
+  }
+  const cols = kt.headers.map((h, i) => ({ h, i })).filter(({ i }) => i !== kc && kt.rows.some((r) => r[i] !== null))
+  const added = cols.map(({ h }) => (headers.includes(h) ? `${h} (key)` : h))
+  const dataIds = new Set<string>()
+  const unmatched = new Set<string>()
+  const values = rows.map((r) => {
+    const id = norm(r[dc])
+    const k = lookup.get(id)
+    if (id) (k ? dataIds : unmatched).add(String(r[dc]))
+    return cols.map(({ i }) => (k ? k[i] : null))
+  })
+  const matchedKeys = new Set([...dataIds].map((d) => norm(d)))
+  return {
+    info: {
+      file: kt.sheet ? `${kt.file} › ${kt.sheet}` : kt.file,
+      keyColumn: kt.headers[kc],
+      dataColumn: headers[dc],
+      added,
+      matchedIds: dataIds.size,
+      unmatchedData: [...unmatched],
+      unusedKeyIds: [...lookup.keys()].filter((k) => !matchedKeys.has(k)).map((k) => String(lookup.get(k)![kc])),
+      notes,
+    },
+    values,
+  }
+}
+
+export function classifyColumns(headers: string[], rows: Cell[][], keyCols: Set<string> = new Set()): ColumnInfo[] {
   return headers.map((name, i) => {
     let nonNull = 0
     let numeric = 0
@@ -255,13 +359,15 @@ export function classifyColumns(headers: string[], rows: Cell[][]): ColumnInfo[]
       if (toNumber(c) !== null) numeric++
       if (distinct.size < 1000) distinct.add(String(c))
     }
-    const meta = name === SOURCE_COL ? 'other' : metaRole(name)
+    // Columns from an animal key are always descriptive metadata, never gait parameters.
+    const meta = name === SOURCE_COL ? 'other' : keyCols.has(name) ? (metaRole(name.replace(/ \(key\)$/, '')) ?? 'other') : metaRole(name)
     return {
       name,
       numericShare: nonNull ? numeric / nonNull : 0,
       distinct: distinct.size,
       match: meta ? null : matchColumn(name),
       meta,
+      fromKey: keyCols.has(name),
     }
   })
 }

@@ -182,7 +182,7 @@ export const PARAMS: ParamDef[] = [
     pairwise: true,
     match: /^phasedispersion/,
     description:
-      'Timing of initial contact of a target paw relative to the step cycle of an anchor paw (0% means they land at the same moment). Diagonal pairs are about 0% and ipsilateral pairs about 50% in a normal walking gait.',
+      'Timing of initial contact of a target paw relative to the step cycle of an anchor paw (0% means they land at the same moment). Diagonal pairs are about 0% and ipsilateral pairs about 50% in a normal walking gait. CatWalk XT reports circular statistics (CStat Mean, AD, R); this app averages the circular means across runs arithmetically, which is accurate unless values sit near the wrap-around point.',
     up: 'Changed phase relationship; a larger spread across runs (SD) means less consistent interlimb coupling.',
   },
   {
@@ -196,6 +196,31 @@ export const PARAMS: ParamDef[] = [
     match: /^coupling/,
     description:
       'Similar to phase dispersion but calculated on the step cycles of the anchor paw rather than on individual steps. It describes the temporal relationship between two paws.',
+  },
+  {
+    id: 'phase_dispersion_r',
+    label: 'Phase dispersion consistency (R)',
+    short: 'Phase disp. R',
+    unit: '0–1',
+    category: 'coordination',
+    perPaw: false,
+    pairwise: true,
+    match: /^phasedispersion/,
+    description:
+      'Mean resultant length (R) of the circular phase-dispersion statistics: how consistently the target paw lands at the same point of the anchor paw\'s step cycle. 1 = perfectly consistent, 0 = random.',
+    down: 'Less consistent interlimb timing: a sensitive sign of impaired coordination (spinal, cerebellar or vestibular).',
+  },
+  {
+    id: 'coupling_r',
+    label: 'Coupling consistency (R)',
+    short: 'Coupling R',
+    unit: '0–1',
+    category: 'coordination',
+    perPaw: false,
+    pairwise: true,
+    match: /^coupling/,
+    description: 'Mean resultant length (R) of the circular coupling statistics: consistency of the temporal relationship between two paws. 1 = perfectly consistent.',
+    down: 'Less consistent coupling between the two paws.',
   },
   // ---- Support --------------------------------------------------------------
   ...(
@@ -278,6 +303,25 @@ export const PARAMS: ParamDef[] = [
     description: 'Same as print position right, for the left paws.',
     up: 'Imprecise hind paw placement: reduced sensorimotor integration, ataxia or corticospinal dysfunction.',
   },
+  ...(
+    [
+      ['sfi', 'Sciatic functional index', 'SFI', /^sciaticfunctionalindex|^sfi$/],
+      ['pfi', 'Peroneal functional index', 'PFI', /^peronealfunctionalindex|^pfi$/],
+      ['tfi', 'Posterior tibial functional index', 'TFI', /^(posterior)?tibialfunctionalindex|^tfi$/],
+    ] as const
+  ).map(
+    ([id, label, short, match]): ParamDef => ({
+      id,
+      label,
+      short,
+      unit: '',
+      category: 'positioning',
+      perPaw: false,
+      match,
+      description: `${label} calculated by CatWalk XT from print length, toe spread and intermediate toe spread of the hind paws (requires manual toe measurements). About 0 is normal and about −100 is complete loss of function.`,
+      down: 'More negative: loss of nerve function (e.g. after sciatic crush or transection).',
+    }),
+  ),
   // ---- Per-paw static ---------------------------------------------------------
   {
     id: 'stand_index',
@@ -535,6 +579,62 @@ export const PARAMS: ParamDef[] = [
     up: 'Longer strides; follows higher speed, and can occur in some ataxic models.',
   },
   {
+    id: 'toe_spread',
+    label: 'Toe spread',
+    short: 'Toe spread',
+    unit: 'cm',
+    category: 'static',
+    perPaw: true,
+    match: /^toespread/,
+    description:
+      'Distance between the first and fifth toes (measured manually in CatWalk XT). Used with print length and intermediate toe spread to calculate the sciatic, peroneal and tibial functional indices.',
+    down: 'Reduced toe spread: denervation of the intrinsic foot muscles (sciatic/tibial nerve injury, neuropathy).',
+  },
+  {
+    id: 'intermediate_toe_spread',
+    label: 'Intermediate toe spread',
+    short: 'Int. toe spread',
+    unit: 'cm',
+    category: 'static',
+    perPaw: true,
+    match: /^intermediatetoespread/,
+    description: 'Distance between the second and fourth toes (measured manually). Used in the functional-index formulas.',
+    down: 'Reduced intermediate toe spread: peripheral nerve dysfunction.',
+  },
+  {
+    id: 'manual_print_length',
+    label: 'Manual print length',
+    short: 'Manual length',
+    unit: 'cm',
+    category: 'static',
+    perPaw: true,
+    match: /^manualprintlength/,
+    description: 'Print length measured manually from heel to the third toe tip. Used in the functional-index formulas.',
+    up: 'Longer prints (heel contact, flattened foot), classically increased after sciatic nerve injury.',
+  },
+  {
+    id: 'paw_angle_body_axis',
+    label: 'Paw angle (body axis)',
+    short: 'Paw angle body',
+    unit: '°',
+    category: 'positioning',
+    perPaw: true,
+    match: /^pawanglebodyaxis/,
+    description: 'Angle between the paw print\'s long axis and the body axis. Requires manual paw-axis annotation in CatWalk XT.',
+    up: 'More outward (external) rotation of the paw; a compensation for instability, seen in some ataxic and neuromuscular models.',
+  },
+  {
+    id: 'paw_angle_movement_vector',
+    label: 'Paw angle (movement vector)',
+    short: 'Paw angle move',
+    unit: '°',
+    category: 'positioning',
+    perPaw: true,
+    match: /^pawanglemovementvector/,
+    description: 'Angle between the paw print\'s long axis and the direction of movement. Requires manual paw-axis annotation.',
+    up: 'More outward paw rotation relative to the direction of travel.',
+  },
+  {
     id: 'body_speed_variation',
     label: 'Body speed variation',
     short: 'Body spd var.',
@@ -576,7 +676,7 @@ export function otherParam(label: string): ParamDef {
 // ---------------------------------------------------------------------------
 // Column-name recognition
 
-export type StatKind = 'mean' | 'sd' | 'sem' | 'median' | 'min' | 'max' | 'cv' | 'value'
+export type StatKind = 'mean' | 'sd' | 'sem' | 'median' | 'min' | 'max' | 'cv' | 'r' | 'value'
 
 export interface ColumnMatch {
   paramId: string
@@ -586,6 +686,9 @@ export interface ColumnMatch {
 }
 
 const STAT_SUFFIX: [RegExp, StatKind][] = [
+  // Circular statistics used by CatWalk XT for phase dispersions and couplings
+  [/[\s_\-.]*(?<![a-z0-9])c?stat\s*r\s*$/i, 'r'],
+  [/[\s_\-.]*(?<![a-z0-9])c?stat\s*ad\s*$/i, 'sd'],
   [/[\s_\-.]*(?<![a-z0-9])(mean|average|avg)\s*$/i, 'mean'],
   [/[\s_\-.]*(?<![a-z0-9])(stdev|st\.?\s?dev|std|sd|standard\s?deviation)\s*$/i, 'sd'],
   [/[\s_\-.]*(?<![a-z0-9])(sem|se|standard\s?error)\s*$/i, 'sem'],
@@ -629,7 +732,8 @@ export function normalizeKey(s: string): string {
 }
 
 export function matchColumn(name: string): ColumnMatch | null {
-  let rest = name.trim()
+  // CatWalk XT 10 prefixes some whole-run values with "OtherStatistics_"
+  let rest = name.trim().replace(/^other[\s_]*statistics[\s_]*/i, '')
   let stat: StatKind = 'value'
   for (const [re, kind] of STAT_SUFFIX) {
     if (re.test(rest)) {
@@ -689,8 +793,10 @@ export function matchColumn(name: string): ColumnMatch | null {
     if (def.perPaw !== Boolean(paw)) continue
     if (def.pairwise && !pairVariant) continue
     if (!def.pairwise && pairVariant) continue
+    // Circular R columns map to their own "consistency" parameter.
+    if (def.pairwise && def.id.endsWith('_r') !== (stat === 'r')) continue
     if (def.match.test(key)) {
-      return { paramId: def.id, paw, variant: pairVariant, stat }
+      return { paramId: def.id, paw, variant: pairVariant, stat: stat === 'r' ? 'mean' : stat }
     }
   }
   return null
@@ -699,21 +805,26 @@ export function matchColumn(name: string): ColumnMatch | null {
 // ---------------------------------------------------------------------------
 // Metadata-column recognition
 
-export type MetaRole = 'subject' | 'group' | 'time' | 'run' | 'compliant' | 'trial' | 'sex' | 'other'
+export type MetaRole = 'subject' | 'group' | 'grouptype' | 'time' | 'run' | 'compliant' | 'trial' | 'sex' | 'nruns' | 'equipment' | 'other'
 
 const META_PATTERNS: [RegExp, MetaRole][] = [
+  [/description$/i, 'other'],
+  [/^group\s*type$/i, 'grouptype'],
+  [/^number\s*of\s*runs/i, 'nruns'],
+  [/^(camera|green\s*intensity|ceiling\s*light|walkway\s*(light|length|width)|[xy][\s-]*unit)/i, 'equipment'],
   [/^(animal|subject|mouse|rat)(\s*(id|name|nr|no|number|code))?$|^(animal|subject)\s*id|^id$|^ear\s*tag/i, 'subject'],
   [/^(group|genotype|treatment|condition|cohort|strain|line|dose|arm|vector|cohort\s*name)\b/i, 'group'],
-  [/^(time\s*point|timepoint|time|week|weeks|day|days|session|age|visit|pod|dpi|wpi)\b/i, 'time'],
+  [/^(time\s*point|timepoint|time|week|weeks|day|days|session|visit|pod|dpi|wpi)\b/i, 'time'],
   [/^run(\s*(id|nr|no|number|name))?$/i, 'run'],
   [/complian/i, 'compliant'],
-  [/^trial(\s*(id|name|nr|no|number))?$/i, 'trial'],
+  [/^(catwalk\s*)?trial(\s*(id|name|nr|no|number))?$/i, 'trial'],
   [/^(sex|gender)$/i, 'sex'],
-  [/^(experiment|file|source|date|comment|notes?|remarks?|status|label|camera|detection)/i, 'other'],
+  [/^(experiment|file|source|date|comment|notes?|remarks?|status|label|detection|age|dob|birth|body\s*weight|weight)/i, 'other'],
 ]
 
 export function metaRole(name: string): MetaRole | null {
-  const n = name.trim()
+  // CatWalk XT 10 uses underscores (Group_Type, Time_Point, Trial_Description)
+  const n = name.trim().replace(/_/g, ' ')
   for (const [re, role] of META_PATTERNS) if (re.test(n)) return role
   return null
 }

@@ -74,7 +74,9 @@ export const DOMAINS: Domain[] = [
       { param: 'step_seq_ra', where: 'run', dir: 0 },
       { param: 'step_seq_rb', where: 'run', dir: 0 },
       { param: 'phase_dispersion', where: 'run', dir: 0 },
+      { param: 'phase_dispersion_r', where: 'run', dir: -1 },
       { param: 'coupling', where: 'run', dir: 0 },
+      { param: 'coupling_r', where: 'run', dir: -1 },
     ],
   },
   {

@@ -32,7 +32,10 @@ export function Loader({ onLoaded, onLearn }: Props) {
         const tables = pickTables(sheets)
         if (!tables.length || !tables.some((t) => t.rows.length)) throw new Error(`${f.name}: no data rows found.`)
         const recognised = tables.reduce((s, t) => s + t.headers.filter((h) => matchColumn(h)).length, 0)
-        if (recognised === 0) errs.push(`${f.name}: no CatWalk parameter columns were recognised. The file will still load, and numeric columns will be analysed as "Other".`)
+        if (recognised < 3)
+          errs.push(
+            `${f.name}: no CatWalk parameters found, so it will be used as an animal key. Its columns (e.g. genotype, sex, age) are joined to the gait data through a matching ID column such as the trial name.`,
+          )
         added.push({ name: f.name, tables })
       } catch (e) {
         errs.push(e instanceof Error ? e.message : `${f.name}: could not be read.`)
@@ -106,8 +109,8 @@ export function Loader({ onLoaded, onLearn }: Props) {
           </p>
         </div>
         {errors.map((e) => (
-          <div key={e} className="notice warning" style={{ marginTop: 10 }}>
-            <span className="ic">!</span>
+          <div key={e} className={`notice${e.includes('animal key') ? '' : ' warning'}`} style={{ marginTop: 10 }}>
+            <span className="ic">{e.includes('animal key') ? 'i' : '!'}</span>
             <span>{e}</span>
           </div>
         ))}
@@ -122,7 +125,9 @@ export function Loader({ onLoaded, onLearn }: Props) {
                       {' '}
                       · {f.tables.reduce((s, t) => s + t.rows.length, 0)} rows
                       {f.tables.length > 1 ? ` from ${f.tables.length} sheets` : ''} ·{' '}
-                      {f.tables[0]?.headers.filter((h) => matchColumn(h)).length ?? 0} parameters recognised
+                      {(f.tables[0]?.headers.filter((h) => matchColumn(h)).length ?? 0) < 3
+                        ? 'animal key'
+                        : `${f.tables[0]?.headers.filter((h) => matchColumn(h)).length} parameters recognised`}
                     </span>
                   </span>
                   <button className="btn ghost sm" onClick={() => setFiles(files.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`}>

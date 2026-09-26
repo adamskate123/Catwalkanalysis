@@ -1,6 +1,6 @@
 # Gait Lab · CatWalk Analyzer
 
-**Version 1.1.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 1.2.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
 A web app that turns **CatWalk XT** (Noldus) gait-analysis exports into structured graphs, statistics and a written phenotype summary, with a built-in tutorial on how CatWalk works and how its parameters change in models of neurological disease.
 
@@ -10,6 +10,8 @@ It runs in any modern browser on **phones, tablets and desktops**, and can be in
 
 **Analyze**
 - Load one or more `.xlsx`, `.csv`, `.tsv` or `.txt` exports (run statistics, one row per run). Preamble lines and two-row Mean/StDev headers are handled, and ~50 CatWalk parameters are recognised across naming variants (`RF Stand (s)_Mean`, `RF_Stand_(s)_Mean`, `Stand_RF`, `Right Front Stand`…). Unrecognised numeric columns are still analysed.
+- Tested against CatWalk XT 10 Run Statistics and Trial Statistics exports. Add an **animal key** spreadsheet (genotype, sex, age…) and it is joined to the gait data automatically by the matching ID column (e.g. trial name).
+- **Filters** (e.g. one sex) and a **run-quality** filter on maximum speed variation, plus warnings for sex or age imbalance, inconsistent acquisition settings and animals with too few runs.
 - Auto-detects the animal ID, group, timepoint and compliance columns, and guesses the control and untreated-disease groups. Everything can be changed in **Setup**.
 - Averages compliant runs per animal, so n = animals and not runs. Adds front/hind means and left–right asymmetry indices for every per-paw parameter.
 - Statistics: Welch t-test / one-way ANOVA or Mann–Whitney U / Kruskal–Wallis; Holm adjustment within each parameter; Benjamini–Hochberg FDR across parameters; Hedges' g effect sizes; **rescue %** for treatment studies (control, untreated disease and treated groups).

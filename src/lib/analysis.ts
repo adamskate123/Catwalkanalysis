@@ -75,8 +75,9 @@ export function buildMeasures(ds: Dataset): Measure[] {
         label: measureLabel(def, c.match.paw, c.match.variant),
       })
     } else {
-      const def = otherParam(c.name)
-      byKey.set(def.id, { key: def.id, def, col, stat: 'value', label: c.name })
+      const label = c.name.replace(/^other[\s_]*statistics[\s_]*/i, 'Other statistics: ').replace(/_/g, ' ')
+      const def = otherParam(label)
+      byKey.set(def.id, { key: def.id, def, col, stat: 'value', label })
     }
   })
   const measures = [...byKey.values()]
@@ -134,7 +135,13 @@ export interface AnalysisConfig {
   test: 'parametric' | 'nonparametric'
   speedAdjust: boolean
   minRuns: number
+  /** Exclude runs whose maximum speed variation (%) exceeds this value; null = keep all. */
+  maxVariation: number | null
+  /** Keep only rows whose value in `col` is one of `values`. */
+  filters: { col: string; values: string[] }[]
 }
+
+export const DEFAULT_MAX_VARIATION = 60
 
 const NO_GROUP = 'All animals'
 
@@ -145,7 +152,7 @@ function colIndex(ds: Dataset, name: string | null): number {
 function cellText(c: Cell): string {
   if (c === null) return ''
   if (typeof c === 'number') return Number.isInteger(c) ? String(c) : String(+c.toFixed(6))
-  return c
+  return c.trim()
 }
 
 export function naturalCompare(a: string, b: string): number {
@@ -178,25 +185,48 @@ export function groupDefaults(groups: string[]): { controlGroup: string | null; 
   }
 }
 
+/** Groups whose rows are labelled "Control" in a CatWalk Group_Type column. */
+function controlsFromGroupType(ds: Dataset, groupCol: string | null): string[] {
+  const gi = colIndex(ds, groupCol)
+  const ti = ds.columns.findIndex((c) => c.meta === 'grouptype')
+  if (gi < 0 || ti < 0) return []
+  const out = new Set<string>()
+  for (const r of ds.rows) if (/^control$/i.test(cellText(r[ti]))) out.add(cellText(r[gi]))
+  return [...out]
+}
+
 export function autoConfig(ds: Dataset): AnalysisConfig {
   const find = (role: string) => ds.columns.find((c) => c.meta === role)?.name ?? null
   const subjectCol = find('subject') ?? find('trial')
   let groupCol = find('group')
   if (!groupCol && ds.sources.length > 1) groupCol = SOURCE_COL
-  const timeCol = find('time')
+  // A time column is only useful with 2+ real timepoints (CatWalk writes "Undefined" when none were set).
+  const timeCol =
+    ds.columns.find((c) => c.meta === 'time' && distinctValues(ds, c.name).filter((v) => !/^undefined$/i.test(v)).length >= 2)?.name ?? null
   const compliantCol = find('compliant')
+  const groups = distinctValues(ds, groupCol)
+  const defaults = groupDefaults(groups)
+  const typed = controlsFromGroupType(ds, groupCol)
+  if (typed.length === 1 && groups.includes(typed[0])) {
+    const control = typed[0]
+    defaults.controlGroup = control
+    if (defaults.diseaseGroup === control) defaults.diseaseGroup = null
+    defaults.groupOrder = [control, ...defaults.groupOrder.filter((g) => g !== control)]
+  }
   return {
     subjectCol,
     groupCol,
     timeCol,
     compliantCol,
     onlyCompliant: Boolean(compliantCol),
-    ...groupDefaults(distinctValues(ds, groupCol)),
+    ...defaults,
     excludedGroups: [],
     timeOrder: distinctValues(ds, timeCol),
     test: 'parametric',
     speedAdjust: false,
     minRuns: 1,
+    maxVariation: null,
+    filters: [],
   }
 }
 
@@ -214,6 +244,8 @@ export interface Subject {
   group: string
   time: string
   nRuns: number
+  sex?: string
+  age?: number
   values: Record<string, number>
   speed: number
 }
@@ -223,6 +255,10 @@ export interface AggregateResult {
   rowsTotal: number
   rowsUsed: number
   rowsNonCompliant: number
+  rowsHighVariation: number
+  rowsFiltered: number
+  /** Runs (rows) whose max speed variation exceeds the default threshold, counted before filtering. */
+  rowsAboveDefaultVariation: number
   speedSlopes: Record<string, number>
   groups: string[]
   times: string[]
@@ -234,6 +270,11 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
   const ti = colIndex(ds, cfg.timeCol)
   const ci = colIndex(ds, cfg.compliantCol)
   const speedM = measures.find((m) => m.def.id === 'speed' && m.col !== undefined)
+  const varM = measures.find((m) => m.def.id === 'speed_variation' && m.col !== undefined)
+  const nri = ds.columns.findIndex((c) => c.meta === 'nruns')
+  const sexi = ds.columns.findIndex((c) => c.meta === 'sex')
+  const agei = ds.columns.findIndex((c) => /^age\b/i.test(c.name) && c.numericShare > 0.8)
+  const filters = cfg.filters.map((f) => ({ i: colIndex(ds, f.col), values: new Set(f.values) })).filter((f) => f.i >= 0)
   const raw = measures.filter((m) => m.col !== undefined)
 
   interface Row {
@@ -242,12 +283,29 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     time: string
     speed: number
     v: number[]
+    nRuns: number
+    sex?: string
+    age?: number
   }
   const rows: Row[] = []
   let nonCompliant = 0
+  let highVar = 0
+  let filtered = 0
+  let aboveDefault = 0
   ds.rows.forEach((r, idx) => {
+    const variation = varM ? toNumber(r[varM.col!]) : null
+    if (variation !== null && variation > DEFAULT_MAX_VARIATION && nri < 0) aboveDefault++
     if (ci >= 0 && cfg.onlyCompliant && !isCompliant(r[ci])) {
       nonCompliant++
+      return
+    }
+    if (filters.some((f) => !f.values.has(cellText(r[f.i])))) {
+      filtered++
+      return
+    }
+    // Only meaningful for run-level rows; trial statistics already average runs.
+    if (cfg.maxVariation !== null && nri < 0 && variation !== null && variation > cfg.maxVariation) {
+      highVar++
       return
     }
     const group = gi >= 0 ? cellText(r[gi]) : NO_GROUP
@@ -261,6 +319,9 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       time,
       speed: speedM ? (toNumber(r[speedM.col!]) ?? NaN) : NaN,
       v: raw.map((m) => toNumber(r[m.col!]) ?? NaN),
+      nRuns: nri >= 0 ? (toNumber(r[nri]) ?? 1) : 1,
+      sex: sexi >= 0 ? cellText(r[sexi]) || undefined : undefined,
+      age: agei >= 0 ? (toNumber(r[agei]) ?? undefined) : undefined,
     })
   })
 
@@ -292,7 +353,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
   }
   const subjects: Subject[] = []
   for (const arr of bySubject.values()) {
-    if (arr.length < cfg.minRuns) continue
+    if (arr.reduce((n, r) => n + r.nRuns, 0) < cfg.minRuns) continue
     const values: Record<string, number> = {}
     raw.forEach((m, j) => {
       values[m.key] = mean(finite(arr.map((r) => r.v[j])))
@@ -302,7 +363,10 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       id: arr[0].subject,
       group: arr[0].group,
       time: arr[0].time,
-      nRuns: arr.length,
+      // Trial-statistics exports carry the run count in their own column.
+      nRuns: arr.reduce((n, r) => n + r.nRuns, 0),
+      sex: arr[0].sex,
+      age: arr[0].age,
       values,
       speed: mean(finite(arr.map((r) => r.speed))),
     })
@@ -317,6 +381,9 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     rowsTotal: ds.rows.length,
     rowsUsed: rows.length,
     rowsNonCompliant: nonCompliant,
+    rowsHighVariation: highVar,
+    rowsFiltered: filtered,
+    rowsAboveDefaultVariation: aboveDefault,
     speedSlopes,
     groups,
     times,
