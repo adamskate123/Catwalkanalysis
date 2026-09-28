@@ -138,3 +138,23 @@ describe('analysis on demo data', () => {
     expect(primaryComparison(r, cfg)!.g).toBeGreaterThan(1)
   })
 })
+
+describe('changed parameters', () => {
+  it('lists measures changed vs control at the current thresholds', async () => {
+    const { changedMeasures, DEFAULT_INTERPRET } = await import('./interpret')
+    const ds = mergeTables(pickTables([demoSheet()]))
+    const measures = buildMeasures(ds)
+    const cfg = autoConfig(ds)
+    const t12 = analyse(aggregate(ds, measures, cfg), measures, cfg).find((t) => t.time === '12 wk')!
+    const changed = changedMeasures(t12, cfg, DEFAULT_INTERPRET)
+    expect(changed.has('regularity_index|')).toBe(true)
+    for (const c of changed.values()) {
+      expect(c.comparison.reference).toBe('WT')
+      expect(c.comparison.pAdj).toBeLessThan(0.05)
+      expect(Math.abs(c.comparison.g)).toBeGreaterThanOrEqual(0.8)
+    }
+    // Stricter thresholds can only shrink the set
+    const strict = changedMeasures(t12, cfg, { ...DEFAULT_INTERPRET, alpha: 0.001, useFdr: true })
+    expect(strict.size).toBeLessThanOrEqual(changed.size)
+  })
+})

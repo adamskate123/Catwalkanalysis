@@ -3,6 +3,21 @@
 All notable changes to Gait Lab (CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-09-28
+
+### Added
+
+- **Story tab.** Figures are grouped by what they suggest together. Each phenotype pattern with evidence gets a chapter containing:
+  - what changed, with its strongest parameters listed;
+  - a dot plot for each (and time courses when there are several timepoints);
+  - a plain-language "what it might mean";
+  - suggested confirmatory tests;
+  - a one-click Prism export of just those figures.
+  
+  It adds a treatment-effect chapter (rescue) when an untreated disease group is set, and a "Before drawing conclusions" chapter covering speed, sex and age confounds.
+- **Significance markers in Parameters.** Each parameter in the list shows ★ with the direction (↑/↓) and how many of its measures changed (e.g. 3/8) versus control at the current thresholds and timepoint. There's also an "Only changed" filter, and each parameter page lists which measures changed.
+- **Choose exactly which parameters go into the Prism file.** "Choose parameters…" opens a searchable checklist grouped by category, with ★ marking changed parameters and quick "Changed only", "Key set" and "Clear" buttons. A "How the Prism file is organised" explainer covers column vs grouped tables and how to use them in Prism.
+
 ## [1.3.0] - 2026-09-26
 
 ### Added
@@ -78,6 +93,7 @@ Tested against real CatWalk XT 10 Run Statistics and Trial Statistics exports.
 - Tutorial: how CatWalk works, experimental design, gait-cycle, paw-print, coordination and support concepts, why speed matters, gait signatures of disease models with PubMed-verified references, and a searchable parameter glossary.
 - Demo dataset (simulated gene-therapy study) and a GitHub Pages deployment workflow.
 
+[1.4.0]: https://github.com/adamskate123/Catwalkanalysis/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/adamskate123/Catwalkanalysis/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/adamskate123/Catwalkanalysis/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/adamskate123/Catwalkanalysis/compare/v1.0.0...v1.1.0
