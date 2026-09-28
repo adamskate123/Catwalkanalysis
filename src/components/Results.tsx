@@ -8,6 +8,7 @@ import type { Dataset } from '../lib/parse'
 import { seriesColor, type ChartTheme } from '../lib/theme'
 import { Setup } from './Setup'
 import { Summary } from './tabs/Summary'
+import { StoryTab } from './tabs/StoryTab'
 import { Fingerprint } from './tabs/Fingerprint'
 import { Explore } from './tabs/Explore'
 import { TimeTab } from './tabs/TimeTab'
@@ -34,7 +35,7 @@ interface Props {
   onLearn: (anchor?: string) => void
 }
 
-type Tab = 'summary' | 'fingerprint' | 'explore' | 'time' | 'speed' | 'data' | 'setup' | 'experiment'
+type Tab = 'summary' | 'story' | 'fingerprint' | 'explore' | 'time' | 'speed' | 'data' | 'setup' | 'experiment'
 
 export function Results(props: Props) {
   const { ds, measures, cfg, setCfg, opt, setOpt, agg, results, theme, onReset, onLearn, experiment, saveState } = props
@@ -63,6 +64,7 @@ export function Results(props: Props) {
   const hasTime = results.length > 1
   const tabs: [Tab, string][] = [
     ['summary', 'Summary'],
+    ['story', 'Story'],
     ['fingerprint', 'Gait fingerprint'],
     ['explore', 'Parameters'],
     ...(hasTime ? ([['time', 'Over time']] as [Tab, string][]) : []),
@@ -113,6 +115,7 @@ export function Results(props: Props) {
         </div>
       )}
       {tab === 'summary' && <Summary {...tabProps} goSetup={() => setTab('setup')} />}
+      {tab === 'story' && <StoryTab {...tabProps} />}
       {tab === 'fingerprint' && <Fingerprint {...tabProps} />}
       {tab === 'explore' && <Explore {...tabProps} selected={measureKey} setSelected={setMeasureKey} />}
       {tab === 'time' && <TimeTab {...tabProps} />}

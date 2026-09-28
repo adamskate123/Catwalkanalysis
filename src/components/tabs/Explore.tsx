@@ -1,10 +1,8 @@
-import { useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { formatNum, formatP, stars, type Measure, type MeasureResult } from '../../lib/analysis'
-import { CATEGORY_LABELS, CATEGORY_ORDER, PAW_NAMES, type ParamDef } from '../../lib/catalog'
-import { mean, sem, finite } from '../../lib/stats'
-import { downloadPng, downloadSvg, safeName } from '../../lib/export'
-import { DotPlot, type DotGroup } from '../charts/DotPlot'
-import { LineChart, type LineSeries } from '../charts/LineChart'
+import { useMemo, useState } from 'react'
+import { formatNum, formatP, type Measure, type MeasureResult } from '../../lib/analysis'
+import { changedMeasures, type Change } from '../../lib/interpret'
+import { CATEGORY_LABELS, CATEGORY_ORDER, type ParamDef } from '../../lib/catalog'
+import { MeasureDots, TimeCourse } from './figures'
 import type { TabProps } from './types'
 
 interface Entry {
@@ -23,69 +21,6 @@ function entriesOf(measures: Measure[]): Entry[] {
     map.set(id, e)
   }
   return [...map.values()]
-}
-
-function ChartCard({ title, children, svg, name }: { title: string; children: ReactNode; svg: RefObject<SVGSVGElement | null>; name: string }) {
-  return (
-    <div className="card">
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: '0.95rem' }}>{title}</h3>
-        <span className="chart-actions">
-          <button className="btn sm" onClick={() => downloadSvg(svg.current, safeName(name))} aria-label={`Download ${title} as SVG`}>
-            SVG
-          </button>
-          <button className="btn sm" onClick={() => downloadPng(svg.current, safeName(name))} aria-label={`Download ${title} as PNG`}>
-            PNG
-          </button>
-        </span>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function MeasureDots({ m, props, height = 240 }: { m: Measure; props: TabProps; height?: number }) {
-  const { agg, results, time, theme, colorOf } = props
-  const ref = useRef<SVGSVGElement>(null)
-  const r = results.find((t) => t.time === time)?.results.find((x) => x.measure.key === m.key)
-  const groups: DotGroup[] = agg.groups.map((g) => {
-    const pts = agg.subjects.filter((s) => s.time === time && s.group === g && Number.isFinite(s.values[m.key])).map((s) => ({ id: s.id, v: s.values[m.key] }))
-    const vals = pts.map((p) => p.v)
-    const cmp = r?.comparisons.find((c) => c.group === g && c.reference === props.cfg.controlGroup)
-    return {
-      name: g,
-      color: colorOf(g),
-      points: pts,
-      mean: mean(vals),
-      sem: sem(vals),
-      n: vals.length,
-      note: cmp ? (stars(cmp.pAdj) || 'ns') : undefined,
-    }
-  })
-  const title = m.paw ? `${PAW_NAMES[m.paw]} (${m.paw})` : m.derived ? m.label.split(', ').slice(1).join(', ') : m.label
-  return (
-    <ChartCard title={title} svg={ref} name={`${m.label}${time ? '_' + time : ''}`}>
-      <DotPlot groups={groups} theme={theme} unit={m.derived?.startsWith('ASYM') ? '% (L−R)' : m.def.unit} height={height} svgRef={ref} />
-    </ChartCard>
-  )
-}
-
-function TimeCourse({ m, props }: { m: Measure; props: TabProps }) {
-  const { agg, theme, colorOf } = props
-  const ref = useRef<SVGSVGElement>(null)
-  const series: LineSeries[] = agg.groups.map((g) => ({
-    name: g,
-    color: colorOf(g),
-    points: agg.times.map((t) => {
-      const vals = finite(agg.subjects.filter((s) => s.group === g && s.time === t).map((s) => s.values[m.key]))
-      return { x: t, mean: mean(vals), sem: sem(vals), n: vals.length }
-    }),
-  }))
-  return (
-    <ChartCard title={`${m.label} over time`} svg={ref} name={`${m.label}_timecourse`}>
-      <LineChart series={series} xs={agg.times} theme={theme} unit={m.def.unit} svgRef={ref} />
-    </ChartCard>
-  )
 }
 
 function StatsTable({ rows, props }: { rows: MeasureResult[]; props: TabProps }) {
@@ -142,10 +77,26 @@ function StatsTable({ rows, props }: { rows: MeasureResult[]; props: TabProps })
   )
 }
 
+function SigMark({ changes, total }: { changes: Change[]; total: number }) {
+  if (!changes.length) return null
+  const up = changes.filter((c) => c.comparison.diff > 0).length
+  const down = changes.length - up
+  const arrow = up && down ? '↕' : up ? '↑' : '↓'
+  const title = changes.map((c) => `${c.result.measure.label}: g = ${c.comparison.g.toFixed(2)}, p = ${formatP(c.comparison.pAdj)}`).join('\n')
+  return (
+    <span className="sig-badge" title={title} aria-label={`${changes.length} of ${total} measures changed`}>
+      ★ {arrow}
+      {total > 1 ? ` ${changes.length}/${total}` : ''}
+    </span>
+  )
+}
+
 export function Explore(props: TabProps & { selected: string | null; setSelected: (k: string) => void }) {
-  const { measures, results, time, selected, setSelected, onLearn, cfg } = props
+  const { measures, results, time, selected, setSelected, onLearn, cfg, opt } = props
   const entries = useMemo(() => entriesOf(measures), [measures])
   const [q, setQ] = useState('')
+  const [onlyChanged, setOnlyChanged] = useState(false)
+  const changed = useMemo(() => changedMeasures(results.find((t) => t.time === time), cfg, opt), [results, time, cfg, opt])
   const [pickerOpen, setPickerOpen] = useState(false)
   const current =
     entries.find((e) => e.measures.some((m) => m.key === selected)) ?? entries.find((e) => e.id === selected) ?? entries.find((e) => e.def.id === 'print_area') ?? entries[0]
@@ -156,12 +107,26 @@ export function Explore(props: TabProps & { selected: string | null; setSelected
   const perPaw = current.measures.filter((m) => m.paw)
   const derived = current.measures.filter((m) => m.derived)
   const single = !perPaw.length ? current.measures[0] : null
-  const filtered = entries.filter((e) => e.label.toLowerCase().includes(q.toLowerCase()))
+  const changesOf = (e: Entry) => e.measures.map((m) => changed.get(m.key)).filter((c): c is Change => Boolean(c))
+  const filtered = entries.filter((e) => e.label.toLowerCase().includes(q.toLowerCase()) && (!onlyChanged || changesOf(e).length > 0))
+  const nChanged = entries.filter((e) => changesOf(e).length > 0).length
   const d = current.def
 
   const picker = (
     <div className="card picker">
       <input type="search" placeholder="Search parameters" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search parameters" />
+      <label className="check small" style={{ marginTop: 8 }}>
+        <input type="checkbox" checked={onlyChanged} onChange={(e) => setOnlyChanged(e.target.checked)} />
+        <span>
+          Only changed vs {cfg.controlGroup ?? 'control'} <span className="muted">({nChanged})</span>
+        </span>
+      </label>
+      <p className="small muted" style={{ margin: '4px 0 0' }}>
+        <span className="sig-badge">★</span> = p &lt; {opt.alpha}
+        {opt.useFdr ? ' and FDR' : ''}, |g| ≥ {opt.minEffect}
+        {time ? ` at ${time}` : ''}. Arrows show the direction.
+      </p>
+      {filtered.length === 0 && <p className="small muted">No parameters match.</p>}
       {CATEGORY_ORDER.map((cat) => {
         const list = filtered.filter((e) => e.def.category === cat)
         if (!list.length) return null
@@ -174,11 +139,12 @@ export function Explore(props: TabProps & { selected: string | null; setSelected
                   <button
                     aria-current={e.id === current.id}
                     onClick={() => {
-                      setSelected(e.measures[0].key)
+                      setSelected((changesOf(e)[0]?.result.measure.key ?? e.measures[0].key))
                       setPickerOpen(false)
                     }}
                   >
-                    {e.label}
+                    <span>{e.label}</span>
+                    <SigMark changes={changesOf(e)} total={e.measures.length} />
                   </button>
                 </li>
               ))}
@@ -206,6 +172,24 @@ export function Explore(props: TabProps & { selected: string | null; setSelected
             {d.unit ? ` · ${d.unit}` : ''}
             {cfg.speedAdjust ? ' · speed-adjusted' : ''}
           </p>
+          {changesOf(current).length > 0 ? (
+            <div className="notice" style={{ marginBottom: 10 }}>
+              <span className="ic">★</span>
+              <span>
+                Changed vs {cfg.controlGroup ?? 'control'}
+                {time ? ` at ${time}` : ''}:{' '}
+                {changesOf(current)
+                  .map((c) => {
+                    const m = c.result.measure
+                    const name = m.paw ?? (m.derived ? m.label.split(', ').slice(1).join(', ') : 'value')
+                    return `${name} ${c.comparison.diff > 0 ? '↑' : '↓'} (${c.comparison.group}, g = ${c.comparison.g.toFixed(2)}, p = ${formatP(c.comparison.pAdj)})`
+                  })
+                  .join('; ')}
+              </span>
+            </div>
+          ) : (
+            <p className="small muted">Not changed vs {cfg.controlGroup ?? 'control'} at the current thresholds{time ? ` (${time})` : ''}.</p>
+          )}
           <p>{d.description}</p>
           {(d.down || d.up) && (
             <ul className="small" style={{ paddingLeft: 18, marginBottom: 0 }}>

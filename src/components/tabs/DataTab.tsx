@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
-import { formatNum, primaryComparison } from '../../lib/analysis'
+import { formatNum, type Measure } from '../../lib/analysis'
+import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../lib/catalog'
 import { animalCsv, download, statsCsv } from '../../lib/export'
-import { isSignificant } from '../../lib/interpret'
+import { changedMeasures } from '../../lib/interpret'
 import { buildPrismTables, describeSettings, toPzfx, type PrismOptions } from '../../lib/prism'
 import { reportMarkdown } from '../../lib/report'
 import { APP_VERSION } from '../../version'
 import type { TabProps } from './types'
 
-type PrismScope = 'key' | 'significant' | 'all'
+type PrismScope = 'key' | 'significant' | 'all' | 'custom'
 
 export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps) {
   const [limit, setLimit] = useState(8)
@@ -17,17 +18,38 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
   const shownMeasures = measures.filter((m) => !m.derived).slice(0, limit)
   const stamp = new Date().toISOString().slice(0, 10)
 
+  // Parameters changed vs control at any timepoint (current thresholds)
+  const changedKeys = useMemo(() => {
+    const keys = new Set<string>()
+    for (const t of results) for (const k of changedMeasures(t, cfg, opt).keys()) keys.add(k)
+    return keys
+  }, [results, cfg, opt])
+  const keyMeasures = useMemo(() => measures.filter((m) => (!m.paw && !m.derived) || m.derived === 'FRONT' || m.derived === 'HIND'), [measures])
+  const [custom, setCustom] = useState<Set<string>>(new Set())
+  const [q, setQ] = useState('')
+
   const prismMeasures = useMemo(() => {
     if (scope === 'all') return measures
-    if (scope === 'key') return measures.filter((m) => (!m.paw && !m.derived) || m.derived === 'FRONT' || m.derived === 'HIND')
-    const sig = new Set<string>()
-    for (const t of results)
-      for (const r of t.results) {
-        const c = primaryComparison(r, cfg)
-        if (c && isSignificant(r, c, opt)) sig.add(r.measure.key)
+    if (scope === 'key') return keyMeasures
+    if (scope === 'significant') return measures.filter((m) => changedKeys.has(m.key))
+    return measures.filter((m) => custom.has(m.key))
+  }, [scope, measures, keyMeasures, changedKeys, custom])
+
+  const setScopeAndSeed = (next: PrismScope) => {
+    // Start a custom selection from whatever was selected before.
+    if (next === 'custom' && custom.size === 0) setCustom(new Set(prismMeasures.map((m) => m.key)))
+    setScope(next)
+  }
+  const toggle = (keys: string[], on: boolean) =>
+    setCustom((prev) => {
+      const n = new Set(prev)
+      for (const k of keys) {
+        if (on) n.add(k)
+        else n.delete(k)
       }
-    return measures.filter((m) => sig.has(m.key))
-  }, [scope, measures, results, cfg, opt])
+      return n
+    })
+  const visible = measures.filter((m) => m.label.toLowerCase().includes(q.toLowerCase()))
   const effLayout = multiTime ? layout : 'column'
   const prismTables = useMemo(
     () => buildPrismTables(agg, { measures: prismMeasures, layout: effLayout, appVersion: APP_VERSION }),
@@ -72,9 +94,10 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
         <div className="form-grid">
           <label className="field">
             Parameters
-            <select value={scope} onChange={(e) => setScope(e.target.value as PrismScope)}>
+            <select value={scope} onChange={(e) => setScopeAndSeed(e.target.value as PrismScope)}>
+              <option value="custom">Choose parameters…</option>
               <option value="key">Key: whole-body + front/hind means</option>
-              <option value="significant">Changed vs control (current thresholds)</option>
+              <option value="significant">Changed vs control ({changedKeys.size})</option>
               <option value="all">All, incl. each paw and asymmetry</option>
             </select>
           </label>
@@ -92,6 +115,75 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
             </span>
           </label>
         </div>
+        {scope === 'custom' && (
+          <div className="prism-pick">
+            <div className="row" style={{ marginBottom: 8 }}>
+              <input type="search" placeholder="Search parameters" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: '1 1 200px', width: 'auto' }} aria-label="Search parameters" />
+              <button className="btn sm" onClick={() => setCustom(new Set(changedKeys))}>
+                Changed only
+              </button>
+              <button className="btn sm" onClick={() => setCustom(new Set(keyMeasures.map((m) => m.key)))}>
+                Key set
+              </button>
+              <button className="btn sm" onClick={() => setCustom(new Set())}>
+                Clear
+              </button>
+            </div>
+            <div className="prism-list">
+              {CATEGORY_ORDER.map((cat) => {
+                const list = visible.filter((m) => m.def.category === cat)
+                if (!list.length) return null
+                const allOn = list.every((m) => custom.has(m.key))
+                return (
+                  <fieldset key={cat}>
+                    <legend>
+                      <label className="check small">
+                        <input type="checkbox" checked={allOn} onChange={(e) => toggle(list.map((m) => m.key), e.target.checked)} />
+                        <span>{CATEGORY_LABELS[cat]}</span>
+                      </label>
+                    </legend>
+                    {list.map((m: Measure) => (
+                      <label key={m.key} className="check small">
+                        <input type="checkbox" checked={custom.has(m.key)} onChange={(e) => toggle([m.key], e.target.checked)} />
+                        <span>
+                          {m.label}
+                          {changedKeys.has(m.key) && <span className="sig-badge" style={{ marginLeft: 6 }}>★</span>}
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                )
+              })}
+            </div>
+            <p className="small muted" style={{ margin: '6px 0 0' }}>
+              <span className="sig-badge">★</span> changed vs {cfg.controlGroup ?? 'control'} at any timepoint (current thresholds). {custom.size} selected.
+            </p>
+          </div>
+        )}
+        <details className="small" style={{ marginTop: 12 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>How the Prism file is organised</summary>
+          <ul style={{ paddingLeft: 18, marginTop: 6 }}>
+            <li>
+              Each selected parameter becomes its own <b>data table</b> (named with the parameter, unit and timepoint), so Prism makes one graph per table.
+              Only the parameters you select are included.
+            </li>
+            <li>
+              <b>Column tables</b>: one column per group ({agg.groups.join(', ')}) with one value per animal (runs averaged). Use them for scatter-dot or bar
+              graphs, t-tests and one-way ANOVA.
+            </li>
+            {multiTime && (
+              <li>
+                <b>Grouped tables</b>: rows are timepoints, columns are groups, and each animal is a replicate subcolumn that keeps its position at every
+                timepoint. Use them for time-course graphs and repeated-measures two-way ANOVA or mixed-effects analysis.
+              </li>
+            )}
+            <li>
+              In Prism: File → Open, choose the .pzfx file, then click any data table and its graph in the navigator. Change a graph's style once, then use
+              Prism's "Apply Magic" to copy it to the others.
+            </li>
+            <li>The project's Info sheet records the app version and analysis settings (filters, run quality, speed adjustment).</li>
+          </ul>
+        </details>
         <div className="row" style={{ marginTop: 12 }}>
           <button className="btn primary" onClick={exportPrism} disabled={prismTables.length === 0}>
             Download Prism file (.pzfx)

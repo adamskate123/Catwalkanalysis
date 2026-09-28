@@ -341,6 +341,7 @@ main {
 .form-grid {
   display: grid;
   gap: 12px;
+  align-items: start;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 label.field {
@@ -880,4 +881,90 @@ footer.app-footer {
 }
 .file-list li > span:first-child {
   min-width: 0;
+}
+
+.picker li button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.sig-badge {
+  flex: none;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-wash);
+  color: var(--accent-ink);
+  white-space: nowrap;
+}
+
+.story-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.story-head h2 {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.story-n {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.story-lede {
+  margin-bottom: 4px;
+}
+.story-evidence {
+  margin: 0 0 12px;
+  padding-left: 18px;
+}
+.story-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  margin-bottom: 12px;
+}
+.story-grid .card {
+  margin: 0;
+  padding: 10px;
+}
+
+.prism-pick {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+.prism-list {
+  max-height: 360px;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+}
+.prism-list fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.prism-list fieldset > label {
+  padding-left: 22px;
+}
+.prism-list legend {
+  font-weight: 700;
+  margin-bottom: 2px;
 }
