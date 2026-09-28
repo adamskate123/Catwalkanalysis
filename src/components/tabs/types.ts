@@ -7,6 +7,7 @@ export interface TabProps {
   ds: Dataset
   measures: Measure[]
   cfg: AnalysisConfig
+  setCfg: (c: AnalysisConfig) => void
   agg: AggregateResult
   results: TimeResults[]
   theme: ChartTheme
