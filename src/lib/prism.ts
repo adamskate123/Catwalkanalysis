@@ -186,7 +186,7 @@ export function toPzfx(tables: PzfxTable[], opt: { appVersion: string; notes?: s
 
 export function describeSettings(cfg: AnalysisConfig): string {
   return [
-    `Values are per-animal means of ${cfg.onlyCompliant && cfg.compliantCol ? 'compliant' : 'all'} ${program().runsNoun}${program().features.speed ? (cfg.speedAdjust ? ' (speed-adjusted)' : ' (not speed-adjusted)') : ''}.`,
+    `Values are per-animal means of ${cfg.onlyCompliant && cfg.compliantCol ? 'compliant' : 'all'} ${program().runsNoun}${program().features.speed ? (cfg.speedAdjust ? ' (speed-adjusted)' : ' (not speed-adjusted)') : ''}${cfg.weightAdjust ? ', adjusted for body weight' : ''}.`,
     `Groups: ${cfg.groupCol ?? 'none'}; control: ${cfg.controlGroup ?? '—'}${cfg.diseaseGroup ? `; untreated disease: ${cfg.diseaseGroup}` : ''}.`,
   ].join(' ')
 }

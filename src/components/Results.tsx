@@ -15,6 +15,7 @@ import { TimeTab } from './tabs/TimeTab'
 import { SpeedTab } from './tabs/SpeedTab'
 import { DataTab } from './tabs/DataTab'
 import { TrialsTab } from './tabs/TrialsTab'
+import { WeightTab } from './tabs/WeightTab'
 import { program } from '../programs'
 import type { TabProps } from './tabs/types'
 
@@ -37,7 +38,7 @@ interface Props {
   onLearn: (anchor?: string) => void
 }
 
-type Tab = 'summary' | 'story' | 'fingerprint' | 'explore' | 'trials' | 'time' | 'speed' | 'data' | 'setup' | 'experiment'
+type Tab = 'summary' | 'story' | 'fingerprint' | 'explore' | 'trials' | 'time' | 'speed' | 'weight' | 'data' | 'setup' | 'experiment'
 
 export function Results(props: Props) {
   const { ds, measures, cfg, setCfg, opt, setOpt, agg, results, theme, onReset, onLearn, experiment, saveState } = props
@@ -87,6 +88,7 @@ export function Results(props: Props) {
     ...(hasTrials ? ([['trials', 'Learning curves']] as [Tab, string][]) : []),
     ...(hasTime ? ([['time', 'Over time']] as [Tab, string][]) : []),
     ...(prog.features.speed ? ([['speed', 'Speed check']] as [Tab, string][]) : []),
+    ...(measures.some((m) => m.def.id === 'body_weight') ? ([['weight', 'Weight check']] as [Tab, string][]) : []),
     ['data', 'Data & export'],
     ['setup', 'Setup'],
     ['experiment', 'Experiment & data'],
@@ -139,6 +141,7 @@ export function Results(props: Props) {
       {tab === 'trials' && <TrialsTab {...tabProps} />}
       {tab === 'time' && <TimeTab {...tabProps} />}
       {tab === 'speed' && <SpeedTab {...tabProps} goSetup={() => setTab('setup')} />}
+      {tab === 'weight' && <WeightTab {...tabProps} goSetup={() => setTab('setup')} />}
       {tab === 'data' && <DataTab {...tabProps} />}
       {tab === 'experiment' && (
         <ExperimentTab

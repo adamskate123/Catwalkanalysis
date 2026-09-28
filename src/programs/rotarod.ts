@@ -3,7 +3,7 @@
 // Instruments (SDI) Rotor-Rod software, or from Excel/Prism tables typed up by
 // hand.
 
-import { matchByParams, type MetaRole, type ParamDef } from '../lib/catalog'
+import { BODY_WEIGHT, matchByParams, type MetaRole, type ParamDef } from '../lib/catalog'
 import { gauss, rng } from '../lib/demo'
 import type { Domain } from '../lib/interpret'
 import type { Cell, RawSheet } from '../lib/parse'
@@ -106,11 +106,13 @@ const PARAMS: ParamDef[] = [
     description: 'Times the animal gripped the rod and rotated with it instead of walking. Many labs count the first full passive rotation as a fall.',
     up: 'Gripping instead of stepping: impaired coordination with preserved grip strength, or a strategy change.',
   },
+  BODY_WEIGHT,
 ]
 
 const CATEGORY_LABELS: Record<string, string> = {
   performance: 'Performance on the rod',
   learning: 'Learning across trials',
+  body: 'Body weight',
   other: 'Other / unrecognised numeric columns',
 }
 
@@ -238,7 +240,7 @@ export const rotarod: ProgramDef = {
     'Load rotarod results exported from the SDI Rotor-Rod software, or Excel and Prism tables. Rotarod Lab averages trials per animal, works out best, first and last trials and within-session improvement, compares groups across days, and points out patterns of impaired coordination or motor learning.',
   params: PARAMS,
   categoryLabels: CATEGORY_LABELS,
-  categoryOrder: ['performance', 'learning', 'other'],
+  categoryOrder: ['performance', 'learning', 'body', 'other'],
   matchColumn: (name) => matchByParams(name.replace(/\((s|sec|secs|seconds|rpm|cm|mm|m|n)\)/gi, ''), PARAMS),
   metaRole,
   domains: DOMAINS,

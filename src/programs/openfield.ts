@@ -2,7 +2,7 @@
 // usually tracked with Noldus EthoVision XT. Exports are EthoVision statistics
 // tables (one row per trial/animal) or Excel/Prism tables typed up by hand.
 
-import { normalizeKey, splitStat, type ColumnMatch, type MetaRole, type ParamDef } from '../lib/catalog'
+import { BODY_WEIGHT, normalizeKey, splitStat, type ColumnMatch, type MetaRole, type ParamDef } from '../lib/catalog'
 import { gauss, rng } from '../lib/demo'
 import type { Domain } from '../lib/interpret'
 import type { Cell, RawSheet } from '../lib/parse'
@@ -12,6 +12,70 @@ const CENTER = '(center|centre|inner|middle|central)'
 const BORDER = '(periphery|peripheral|outer|border|wall|edge|thigmo|corner|surround)'
 
 const PARAMS: ParamDef[] = [
+  // Zone-specific activity (checked before the zone time/entry patterns and the whole-arena measures)
+  {
+    id: 'center_rest',
+    displayOrder: 140,
+    label: 'Resting time in centre',
+    short: 'Centre rest',
+    unit: 's',
+    category: 'anxiety',
+    perPaw: false,
+    match: new RegExp(`(rest|immobil|notmoving|inactiv).*${CENTER}|${CENTER}.*(rest|immobil|notmoving|inactiv)`),
+    description: 'Time spent resting (not moving) while in the centre zone.',
+    up: 'Pausing in the exposed centre: low anxiety-like behaviour, or low activity overall.',
+    down: 'Little resting in the centre: the animal crosses it quickly or avoids it.',
+  },
+  {
+    id: 'periphery_rest',
+    displayOrder: 141,
+    label: 'Resting time in periphery',
+    short: 'Periphery rest',
+    unit: 's',
+    category: 'anxiety',
+    perPaw: false,
+    match: new RegExp(`(rest|immobil|notmoving|inactiv).*${BORDER}|${BORDER}.*(rest|immobil|notmoving|inactiv)`),
+    description: 'Time spent resting while near the walls.',
+    up: 'Resting near the walls: hypoactivity together with wall-seeking (anxiety-like) behaviour.',
+  },
+  {
+    id: 'center_speed',
+    displayOrder: 142,
+    label: 'Speed in centre',
+    short: 'Centre speed',
+    unit: 'cm/s',
+    category: 'anxiety',
+    perPaw: false,
+    match: new RegExp(`(speed|velocity).*${CENTER}|${CENTER}.*(speed|velocity)`),
+    description: 'Average speed while in the centre zone.',
+    up: 'Rushing through the exposed centre, often seen with anxiety-like behaviour.',
+    down: 'Slower movement in the centre.',
+  },
+  {
+    id: 'periphery_speed',
+    displayOrder: 143,
+    label: 'Speed in periphery',
+    short: 'Periphery speed',
+    unit: 'cm/s',
+    category: 'locomotion',
+    perPaw: false,
+    match: new RegExp(`(speed|velocity).*${BORDER}|${BORDER}.*(speed|velocity)`),
+    description: 'Average speed while near the walls.',
+    down: 'Slower movement along the walls: hypoactivity or motor impairment.',
+    up: 'Faster movement along the walls.',
+  },
+  {
+    id: 'periphery_distance',
+    displayOrder: 144,
+    label: 'Distance in periphery',
+    short: 'Periphery distance',
+    unit: 'cm',
+    category: 'locomotion',
+    perPaw: false,
+    match: new RegExp(`${BORDER}.*distance|distance.*${BORDER}`),
+    description: 'Distance travelled near the walls.',
+    down: 'Less movement along the walls: hypoactivity.',
+  },
   // Centre vs periphery (checked first: EthoVision names mention the zone and the statistic)
   {
     id: 'center_time_pct',
@@ -191,12 +255,14 @@ const PARAMS: ParamDef[] = [
     description: 'Number of fecal boli left in the arena: an autonomic index of emotionality.',
     up: 'Higher emotionality or stress.',
   },
+  BODY_WEIGHT,
 ]
 
 const CATEGORY_LABELS: Record<string, string> = {
   locomotion: 'Locomotor activity',
   anxiety: 'Centre vs periphery (anxiety-like behaviour)',
   exploration: 'Exploration and other behaviours',
+  body: 'Body weight',
   other: 'Other / unrecognised numeric columns',
 }
 
@@ -406,7 +472,7 @@ export const openfield: ProgramDef = {
     'Load open field results exported from EthoVision XT, or Excel and Prism tables. Open Field Lab recognises activity and centre/periphery measures, compares groups and timepoints, and points out patterns of hypo- or hyperactivity and anxiety-like behaviour.',
   params: PARAMS,
   categoryLabels: CATEGORY_LABELS,
-  categoryOrder: ['locomotion', 'anxiety', 'exploration', 'other'],
+  categoryOrder: ['locomotion', 'anxiety', 'exploration', 'body', 'other'],
   matchColumn,
   metaRole,
   domains: DOMAINS,

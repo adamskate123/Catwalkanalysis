@@ -6,6 +6,7 @@ import { program } from '../programs'
 import { aggregate, analyse, combineGroups, DEFAULT_MAX_VARIATION, distinctValues, formatNum, formatP, groupMembers, isControlLike, splitGroup, type AggregateResult, type AnalysisConfig, type Measure, type TimeResults } from './analysis'
 import { changedMeasures, interpret, isReported, type InterpretOptions } from './interpret'
 import type { Dataset } from './parse'
+import { pooledWithinSlope } from './stats'
 
 export interface RefineOption {
   /** Label of the choice, e.g. "M only". */
@@ -55,6 +56,36 @@ export function refinements(ds: Dataset, measures: Measure[], agg: AggregateResu
         reset: (c) => ({ ...c, maxVariation: null }),
         active,
         summary: `runs with >${cfg.maxVariation ?? DEFAULT_MAX_VARIATION}% speed variation excluded`,
+      })
+    }
+  }
+
+  // 1b. Body weight differs between groups
+  const weightRes = tr?.results.find((r) => r.measure.def.id === 'body_weight')
+  if (weightRes) {
+    const active = Boolean(cfg.weightAdjust)
+    const differs = weightRes.comparisons.find((c) => c.reference === cfg.controlGroup && c.pAdj < 0.05)
+    if (active || differs) {
+      // How strongly the first outcome depends on weight within groups
+      const outcome = tr!.results.find((r) => r.measure.def.id !== 'body_weight' && r.measure.col !== undefined)
+      const at = agg.subjects.filter((s) => s.time === tr!.time)
+      const slope = outcome
+        ? pooledWithinSlope(at.map((s) => ({ x: s.weight ?? NaN, y: s.values[outcome.measure.key], g: s.group })))
+        : NaN
+      const slopeText =
+        outcome && Number.isFinite(slope)
+          ? ` Within groups, ${outcome.measure.label.toLowerCase()} changes by ${slope > 0 ? '+' : ''}${formatNum(slope)} ${outcome.measure.def.unit} per gram of body weight.`
+          : ''
+      out.push({
+        id: 'weight',
+        title: 'Adjust for body weight',
+        why: active
+          ? `All parameters are adjusted to the mean body weight at each timepoint.${agg.weightMissing ? ` ${agg.weightMissing} animal-timepoint(s) without a weight are left out of adjusted parameters.` : ''}`
+          : `Body weight differs between ${differs!.group} and ${differs!.reference} (${differs!.diffPct > 0 ? '+' : ''}${differs!.diffPct.toFixed(0)}%, p = ${formatP(differs!.pAdj)}).${slopeText} Differences in weight can masquerade as, or hide, a behavioural difference; adjusting shows what remains at equal weight.`,
+        options: [{ label: 'Adjust', apply: (c) => ({ ...c, weightAdjust: true }), active: (c) => Boolean(c.weightAdjust) }],
+        reset: (c) => ({ ...c, weightAdjust: false }),
+        active,
+        summary: 'adjusted for body weight',
       })
     }
   }

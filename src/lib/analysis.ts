@@ -111,7 +111,7 @@ export function sortMeasures(ms: Measure[]): Measure[] {
   const { params, categoryOrder } = program()
   const paramIndex = (m: Measure) => {
     const i = params.findIndex((p) => p.id === m.def.id)
-    return i < 0 ? 999 : i
+    return i < 0 ? 999 : (params[i].displayOrder ?? i)
   }
   const catIndex = (m: Measure) => {
     const i = categoryOrder.indexOf(m.def.category)
@@ -144,6 +144,8 @@ export interface AnalysisConfig {
   timeOrder: string[]
   test: 'parametric' | 'nonparametric'
   speedAdjust: boolean
+  /** Adjust every parameter for body weight (pooled within-group slope, per timepoint centring). */
+  weightAdjust?: boolean
   minRuns: number
   /** Exclude runs whose maximum speed variation (%) exceeds this value; null = keep all. */
   maxVariation: number | null
@@ -342,6 +344,8 @@ export interface Subject {
   age?: number
   values: Record<string, number>
   speed: number
+  /** Body weight (g), when a weight column or weight file is present. */
+  weight?: number
 }
 
 export interface AggregateResult {
@@ -354,6 +358,10 @@ export interface AggregateResult {
   /** Runs (rows) whose max speed variation exceeds the default threshold, counted before filtering. */
   rowsAboveDefaultVariation: number
   speedSlopes: Record<string, number>
+  /** Within-group slope of each parameter on body weight (units per g), when weight adjustment is on. */
+  weightSlopes: Record<string, number>
+  /** Animal-timepoints left out of adjusted parameters because their weight is missing. */
+  weightMissing: number
   groups: string[]
   times: string[]
   /** Row-level values when rows are individual trials/runs with a trial number (for learning curves). */
@@ -376,6 +384,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
   const ci = colIndex(ds, cfg.compliantCol)
   const speedM = measures.find((m) => m.def.id === 'speed' && m.col !== undefined)
   const varM = measures.find((m) => m.def.id === 'speed_variation' && m.col !== undefined)
+  const weightM = measures.find((m) => m.def.id === 'body_weight' && m.col !== undefined)
   const nri = ds.columns.findIndex((c) => c.meta === 'nruns')
   const sexi = ds.columns.findIndex((c) => c.meta === 'sex')
   const agei = ds.columns.findIndex((c) => /^age\b/i.test(c.name) && c.numericShare > 0.8)
@@ -390,6 +399,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     group: string
     time: string
     speed: number
+    weight: number
     v: number[]
     nRuns: number
     sex?: string
@@ -428,6 +438,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       group,
       time,
       speed: speedM ? (toNumber(r[speedM.col!]) ?? NaN) : NaN,
+      weight: weightM ? (toNumber(r[weightM.col!]) ?? NaN) : NaN,
       v: raw.map((m) => toNumber(r[m.col!]) ?? NaN),
       nRuns: nri >= 0 ? (toNumber(r[nri]) ?? 1) : 1,
       sex: sexi >= 0 ? cellText(r[sexi]) || undefined : undefined,
@@ -482,7 +493,27 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       age: arr[0].age,
       values,
       speed: mean(finite(arr.map((r) => r.speed))),
+      weight: weightM ? mean(finite(arr.map((r) => r.weight))) : undefined,
     })
+  }
+
+  // Optional ANCOVA-style adjustment for body weight at the animal level: the slope of each
+  // parameter on weight is pooled within group × timepoint, and values are re-centred on the
+  // mean weight of all animals at that timepoint.
+  const weightSlopes: Record<string, number> = {}
+  let weightMissing = 0
+  if (cfg.weightAdjust && weightM) {
+    const w = (s: Subject) => s.weight ?? NaN
+    weightMissing = subjects.filter((s) => !Number.isFinite(w(s))).length
+    const grand = new Map<string, number>()
+    for (const t of new Set(subjects.map((s) => s.time))) grand.set(t, mean(finite(subjects.filter((s) => s.time === t).map(w))))
+    for (const m of measures) {
+      if (m === weightM || m.def.id === 'body_weight') continue
+      const slope = pooledWithinSlope(subjects.map((s) => ({ x: w(s), y: s.values[m.key], g: `${s.group}\u0000${s.time}` })))
+      if (!Number.isFinite(slope)) continue
+      weightSlopes[m.key] = slope
+      for (const s of subjects) s.values[m.key] = Number.isFinite(w(s)) ? s.values[m.key] - slope * (w(s) - grand.get(s.time)!) : NaN
+    }
   }
 
   const present = new Set(subjects.map((s) => s.group))
@@ -498,6 +529,8 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     rowsFiltered: filtered,
     rowsAboveDefaultVariation: aboveDefault,
     speedSlopes,
+    weightSlopes,
+    weightMissing,
     groups,
     times,
     trials:
