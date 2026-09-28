@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactElement } from 'react'
 import { pickTables } from '../lib/parse'
-import { demoSheet, sheetToCsv } from '../lib/demo'
+import { sheetToCsv } from '../lib/demo'
 import { download } from '../lib/export'
-import { matchColumn } from '../lib/catalog'
 import type { ExperimentSummary } from '../lib/experiment'
+import { getImportOptions, setImportOptions, type PrismLayout } from '../lib/importers'
 import { isBackupFile, readSpreadsheets, type LoadedFile } from '../lib/readFiles'
-import { WalkwayDiagram } from './diagrams'
+import { PROGRAMS, program } from '../programs'
+import { ArenaDiagram, RotarodDiagram, WalkwayDiagram } from './diagrams'
 
 interface Props {
   onLoaded: (files: LoadedFile[]) => void
@@ -14,6 +15,53 @@ interface Props {
   onOpen: (id: string) => void
   onDelete: (id: string) => void
   onImport: (file: File) => Promise<void>
+  /** Saved experiments that belong to the other programs, by program id. */
+  otherCounts: Record<string, number>
+  onSwitch: (id: string) => void
+}
+
+const HERO: Record<string, { title: string; figure: () => ReactElement; caption: string; learn: string }> = {
+  catwalk: {
+    title: 'Turn CatWalk XT exports into graphs and a readable gait summary',
+    figure: WalkwayDiagram,
+    caption: 'CatWalk: light trapped in a glass walkway escapes where a paw touches it, so a high-speed camera below sees bright paw prints.',
+    learn: 'How CatWalk works →',
+  },
+  rotarod: {
+    title: 'Turn rotarod results into learning curves and a readable motor summary',
+    figure: RotarodDiagram,
+    caption: 'Rotarod: mice walk on a rod that gradually speeds up; the time until each mouse falls measures coordination, balance and motor learning.',
+    learn: 'How the rotarod works →',
+  },
+  openfield: {
+    title: 'Turn open field tracking into graphs and a readable activity summary',
+    figure: ArenaDiagram,
+    caption: 'Open field: a camera tracks the mouse in a novel arena. Distance measures activity; time near the walls versus the centre reflects anxiety-like behaviour.',
+    learn: 'How the open field works →',
+  },
+}
+
+/** How Prism tables (and Prism-style spreadsheets) are read. */
+export function ImportOptionsField() {
+  const [layout, setLayout] = useState<PrismLayout>(getImportOptions().prismLayout ?? 'auto')
+  return (
+    <label className="field" style={{ maxWidth: 420, marginTop: 12 }}>
+      Prism tables and group-per-column sheets
+      <select
+        value={layout}
+        onChange={(e) => {
+          const v = e.target.value as PrismLayout
+          setLayout(v)
+          setImportOptions({ prismLayout: v })
+        }}
+      >
+        <option value="auto">Automatic (rows are animals unless it's an XY table)</option>
+        <option value="animals">Rows are animals, subcolumns are {program().runsNoun}</option>
+        <option value="trials">Rows are {program().rowAxis.toLowerCase()}s, subcolumns are animals</option>
+      </select>
+      <span className="hint">Applies to files you add after changing it.</span>
+    </label>
+  )
 }
 
 function when(iso: string): string {
@@ -21,7 +69,10 @@ function when(iso: string): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImport }: Props) {
+export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImport, otherCounts, onSwitch }: Props) {
+  const prog = program()
+  const hero = HERO[prog.id]
+  const Figure = hero.figure
   const [files, setFiles] = useState<LoadedFile[]>([])
   const [errors, setErrors] = useState<{ text: string; level: 'info' | 'warning' }[]>([])
   const [busy, setBusy] = useState(false)
@@ -51,27 +102,37 @@ export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImp
     <>
       <section className="hero">
         <div>
-          <h1>Turn CatWalk XT exports into graphs and a readable gait summary</h1>
-          <p className="lede">
-            Load one or more run-statistics files exported from CatWalk XT. Gait Lab recognises the parameters, averages runs per animal, compares groups
-            and timepoints, and points out patterns linked to specific kinds of neurological deficit.
-          </p>
+          <h1>{hero.title}</h1>
+          <p className="lede">{prog.lede}</p>
           <div className="row">
-            <button className="btn primary" onClick={() => onLoaded([{ name: 'Demo data (simulated)', tables: pickTables([demoSheet()]), isKey: false }])}>
+            <button className="btn primary" onClick={() => onLoaded([{ name: 'Demo data (simulated)', tables: pickTables([prog.demo()]), isKey: false }])}>
               Try with demo data
             </button>
             <button className="btn" onClick={onLearn}>
-              How CatWalk works →
+              {hero.learn}
             </button>
           </div>
         </div>
         <figure className="figure" style={{ margin: 0 }}>
-          <WalkwayDiagram />
-          <figcaption>
-            CatWalk: light trapped in a glass walkway escapes where a paw touches it, so a high-speed camera below sees bright paw prints.
-          </figcaption>
+          <Figure />
+          <figcaption>{hero.caption}</figcaption>
         </figure>
       </section>
+
+      {Object.values(otherCounts).some((n) => n > 0) && (
+        <p className="small muted" style={{ margin: '0 0 12px' }}>
+          Also saved on this device:{' '}
+          {PROGRAMS.filter((p) => otherCounts[p.id]).map((p, i) => (
+            <span key={p.id}>
+              {i > 0 && ', '}
+              <button className="btn ghost sm" style={{ padding: 0, minHeight: 0 }} onClick={() => onSwitch(p.id)}>
+                {otherCounts[p.id]} in {p.name}
+              </button>
+            </span>
+          ))}
+          .
+        </p>
+      )}
 
       {experiments.length > 0 && (
         <div className="card">
@@ -130,7 +191,7 @@ export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImp
             ref={input}
             type="file"
             multiple
-            accept=".xlsx,.xlsm,.csv,.txt,.tsv,.json,.gaitlab,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain"
+            accept=".xlsx,.xlsm,.csv,.txt,.tsv,.prism,.json,.gaitlab,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain"
             onChange={(e) => {
               if (e.target.files?.length) addFiles(e.target.files)
               e.target.value = ''
@@ -138,10 +199,12 @@ export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImp
           />
           <p style={{ fontWeight: 600, marginBottom: 4 }}>{busy ? 'Reading…' : 'Drop files here or tap to choose'}</p>
           <p className="muted small" style={{ margin: 0 }}>
-            Excel (.xlsx) or text (.csv, .txt, .tsv). Add several files to combine cohorts or timepoints, or drop a Gait Lab backup (.gaitlab.json) to
-            restore a saved experiment.
+            {prog.instrument} exports, Excel (.xlsx), text (.csv, .txt, .tsv) or Prism 10 (.prism). Spreadsheets can hold one row per{' '}
+            {prog.runNoun}, one column per {prog.runNoun} or group (Prism style), or a measure/value list. Add several files to combine cohorts or
+            timepoints, or drop a backup (.gaitlab.json) to restore a saved experiment.
           </p>
         </div>
+        <ImportOptionsField />
         {errors.map((e) => (
           <div key={e.text} className={`notice${e.level === 'warning' ? ' warning' : ''}`} style={{ marginTop: 10 }}>
             <span className="ic">{e.level === 'warning' ? '!' : 'i'}</span>
@@ -161,7 +224,7 @@ export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImp
                       {f.tables.length > 1 ? ` from ${f.tables.length} sheets` : ''} ·{' '}
                       {f.isKey
                         ? 'animal key'
-                        : `${f.tables[0]?.headers.filter((h) => matchColumn(h)).length} parameters recognised`}
+                        : `${f.tables[0]?.headers.filter((h) => prog.matchColumn(h)).length} parameters recognised`}
                     </span>
                   </span>
                   <button className="btn ghost sm" onClick={() => setFiles(files.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`}>
@@ -181,36 +244,19 @@ export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImp
       </div>
 
       <div className="steps">
-        <div className="card">
-          <h3>
-            <span className="step-n">1</span>Export from CatWalk XT
-          </h3>
-          <p className="small">
-            After classifying runs, open <i>Analysis → Statistics</i> and export the <b>run statistics</b> (one row per run) to Excel or text. Include your
-            independent variables (e.g. genotype, treatment, timepoint) and the animal/trial ID.
-          </p>
-        </div>
-        <div className="card">
-          <h3>
-            <span className="step-n">2</span>Check the setup
-          </h3>
-          <p className="small">
-            Gait Lab guesses which columns hold the animal ID, group and timepoint and which group is the control. You can change any of these, reorder
-            groups, exclude non-compliant runs and adjust for walking speed.
-          </p>
-        </div>
-        <div className="card">
-          <h3>
-            <span className="step-n">3</span>Read the results
-          </h3>
-          <p className="small">
-            Get a written summary, a gait "fingerprint" heatmap, per-paw plots, time courses and tables. Everything can be exported as CSV, SVG or PNG.
-          </p>
-        </div>
+        {prog.steps.map((st, k) => (
+          <div className="card" key={st.title}>
+            <h3>
+              <span className="step-n">{k + 1}</span>
+              {st.title}
+            </h3>
+            <p className="small">{st.text}</p>
+          </div>
+        ))}
       </div>
       <p className="small muted">
         Want to see the expected layout?{' '}
-        <button className="btn ghost sm" onClick={() => download('demo_catwalk_runs.csv', sheetToCsv(demoSheet()), 'text/csv')}>
+        <button className="btn ghost sm" onClick={() => download(prog.demoFile, sheetToCsv(prog.demo()), 'text/csv')}>
           Download the demo file
         </button>
       </p>

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
+import { program } from '../../programs'
 import { formatNum, formatP, stars, type Comparison, type MeasureResult } from '../../lib/analysis'
-import { CATEGORY_LABELS, PAWS } from '../../lib/catalog'
+import { PAWS } from '../../lib/catalog'
 import { downloadPng, downloadSvg, safeName } from '../../lib/export'
 import { DivergingLegend, Heatmap, type HeatCell, type HeatRow } from '../charts/Heatmap'
 import type { TabProps } from './types'
@@ -60,23 +61,24 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure }: TabProps
       const c = x && cellFor(x, find(x), d)
       if (c) cells.push(c)
     }
-    pawRows.push({ key: r.measure.def.id, label: r.measure.def.label.replace(/ \(.*\)$/, ''), section: CATEGORY_LABELS[r.measure.def.category], cells })
+    pawRows.push({ key: r.measure.def.id, label: r.measure.def.label.replace(/ \(.*\)$/, ''), section: program().categoryLabels[r.measure.def.category], cells })
   }
 
   const bodyRows: HeatRow[] = tr.results
     .filter((r) => !r.measure.paw && !r.measure.derived)
     .map((r) => {
       const c = cellFor(r, find(r), 'g')
-      return { key: r.measure.key, label: r.measure.label, section: CATEGORY_LABELS[r.measure.def.category], cells: c ? [c] : [] }
+      return { key: r.measure.key, label: r.measure.label, section: program().categoryLabels[r.measure.def.category], cells: c ? [c] : [] }
     })
 
   const base = safeName(`fingerprint_${pair.group}_vs_${pair.reference}${time ? '_' + time : ''}`)
 
+  const paws = program().features.paws
   return (
     <>
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0 }}>Gait fingerprint</h2>
+          <h2 style={{ margin: 0 }}>{paws ? 'Gait fingerprint' : 'Effect-size fingerprint'}</h2>
           {pairs.length > 1 && (
             <select value={pi} onChange={(e) => setPi(Number(e.target.value))} style={{ width: 'auto', maxWidth: '100%' }} aria-label="Comparison">
               {pairs.map((p, i) => (
@@ -90,12 +92,12 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure }: TabProps
         <p className="small muted" style={{ marginTop: 8 }}>
           Each cell is the effect size (Hedges g) for <b>{pair.group}</b> relative to <b>{pair.reference}</b>
           {time ? ` at ${time}` : ''}. Blue = lower, red = higher; darker = larger effect. Stars mark Holm-adjusted p &lt; 0.05 (*), 0.01 (**), 0.001 (***).
-          Tap a cell to open that parameter. Asymmetry columns: positive values mean the left paw's value is higher than the right's.
+          Tap a cell to open that parameter.{paws ? " Asymmetry columns: positive values mean the left paw's value is higher than the right's." : ''}
         </p>
         <DivergingLegend theme={theme} />
       </div>
-      <div className="grid-2">
-        <div className="card">
+      <div className={paws ? 'grid-2' : undefined}>
+        {paws && <div className="card">
           <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
             <h3 style={{ margin: 0 }}>Per-paw parameters</h3>
             <span className="chart-actions">
@@ -125,10 +127,10 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure }: TabProps
           ) : (
             <p className="small muted">No per-paw parameters in this file.</p>
           )}
-        </div>
+        </div>}
         <div className="card">
           <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-            <h3 style={{ margin: 0 }}>Whole-body parameters</h3>
+            <h3 style={{ margin: 0 }}>{paws ? 'Whole-body parameters' : 'Parameters'}</h3>
             <span className="chart-actions">
               <button className="btn sm" onClick={() => downloadSvg(bodyRef.current, base + '_body')}>
                 SVG
@@ -141,7 +143,7 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure }: TabProps
           {bodyRows.length ? (
             <Heatmap rows={bodyRows} cols={[{ key: 'g', label: 'g' }]} theme={theme} svgRef={bodyRef} onSelect={(row) => openMeasure(row)} />
           ) : (
-            <p className="small muted">No whole-body parameters in this file.</p>
+            <p className="small muted">No {paws ? 'whole-body ' : ''}parameters in this file.</p>
           )}
         </div>
       </div>

@@ -14,6 +14,8 @@ import { Explore } from './tabs/Explore'
 import { TimeTab } from './tabs/TimeTab'
 import { SpeedTab } from './tabs/SpeedTab'
 import { DataTab } from './tabs/DataTab'
+import { TrialsTab } from './tabs/TrialsTab'
+import { program } from '../programs'
 import type { TabProps } from './tabs/types'
 
 interface Props {
@@ -35,7 +37,7 @@ interface Props {
   onLearn: (anchor?: string) => void
 }
 
-type Tab = 'summary' | 'story' | 'fingerprint' | 'explore' | 'time' | 'speed' | 'data' | 'setup' | 'experiment'
+type Tab = 'summary' | 'story' | 'fingerprint' | 'explore' | 'trials' | 'time' | 'speed' | 'data' | 'setup' | 'experiment'
 
 export function Results(props: Props) {
   const { ds, measures, cfg, setCfg, opt, setOpt, agg, results, theme, onReset, onLearn, experiment, saveState } = props
@@ -62,19 +64,22 @@ export function Results(props: Props) {
 
   const tabProps: TabProps = { ds, measures, cfg, setCfg, agg, results, theme, opt, time, colorOf, openMeasure, onLearn }
   const hasTime = results.length > 1
+  const prog = program()
+  const hasTrials = Boolean(prog.trialDerived) && agg.trials.length > 0
   const tabs: [Tab, string][] = [
     ['summary', 'Summary'],
     ['story', 'Story'],
-    ['fingerprint', 'Gait fingerprint'],
+    ['fingerprint', prog.features.paws ? 'Gait fingerprint' : 'Fingerprint'],
     ['explore', 'Parameters'],
+    ...(hasTrials ? ([['trials', 'Learning curves']] as [Tab, string][]) : []),
     ...(hasTime ? ([['time', 'Over time']] as [Tab, string][]) : []),
-    ['speed', 'Speed check'],
+    ...(prog.features.speed ? ([['speed', 'Speed check']] as [Tab, string][]) : []),
     ['data', 'Data & export'],
     ['setup', 'Setup'],
     ['experiment', 'Experiment & data'],
   ]
 
-  const showTimePicker = hasTime && tab !== 'time' && tab !== 'setup' && tab !== 'data' && tab !== 'experiment'
+  const showTimePicker = hasTime && tab !== 'time' && tab !== 'trials' && tab !== 'setup' && tab !== 'data' && tab !== 'experiment'
 
   return (
     <>
@@ -118,6 +123,7 @@ export function Results(props: Props) {
       {tab === 'story' && <StoryTab {...tabProps} />}
       {tab === 'fingerprint' && <Fingerprint {...tabProps} />}
       {tab === 'explore' && <Explore {...tabProps} selected={measureKey} setSelected={setMeasureKey} />}
+      {tab === 'trials' && <TrialsTab {...tabProps} />}
       {tab === 'time' && <TimeTab {...tabProps} />}
       {tab === 'speed' && <SpeedTab {...tabProps} goSetup={() => setTab('setup')} />}
       {tab === 'data' && <DataTab {...tabProps} />}

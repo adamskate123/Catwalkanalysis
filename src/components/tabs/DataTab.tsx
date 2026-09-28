@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
+import { program } from '../../programs'
 import { formatNum, type Measure } from '../../lib/analysis'
-import { CATEGORY_LABELS, CATEGORY_ORDER } from '../../lib/catalog'
 import { animalCsv, download, statsCsv } from '../../lib/export'
 import { changedMeasures } from '../../lib/interpret'
 import { buildPrismTables, describeSettings, toPzfx, type PrismOptions } from '../../lib/prism'
@@ -12,7 +12,9 @@ type PrismScope = 'key' | 'significant' | 'all' | 'custom'
 
 export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps) {
   const [limit, setLimit] = useState(8)
-  const multiTime = agg.times.length > 1
+  const prog = program()
+  const byTrial = Boolean(prog.trialDerived) && agg.trials.length > 0
+  const multiTime = agg.times.length > 1 || byTrial
   const [scope, setScope] = useState<PrismScope>('key')
   const [layout, setLayout] = useState<PrismOptions['layout']>(multiTime ? 'both' : 'column')
   const shownMeasures = measures.filter((m) => !m.derived).slice(0, limit)
@@ -52,12 +54,12 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
   const visible = measures.filter((m) => m.label.toLowerCase().includes(q.toLowerCase()))
   const effLayout = multiTime ? layout : 'column'
   const prismTables = useMemo(
-    () => buildPrismTables(agg, { measures: prismMeasures, layout: effLayout, appVersion: APP_VERSION }),
-    [agg, prismMeasures, effLayout],
+    () => buildPrismTables(agg, { measures: prismMeasures, layout: effLayout, appVersion: APP_VERSION, runNoun: byTrial ? prog.runNoun : undefined }),
+    [agg, prismMeasures, effLayout, byTrial, prog.runNoun],
   )
   const exportPrism = () =>
     download(
-      `catwalk_prism_${stamp}.pzfx`,
+      `${prog.filePrefix}_prism_${stamp}.pzfx`,
       toPzfx(prismTables, { appVersion: APP_VERSION, notes: describeSettings(cfg) }),
       'application/xml',
     )
@@ -67,13 +69,13 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
       <div className="card">
         <h2>Export</h2>
         <div className="row">
-          <button className="btn primary" onClick={() => download(`catwalk_animals_${stamp}.csv`, animalCsv(agg, measures), 'text/csv')}>
+          <button className="btn primary" onClick={() => download(`${prog.filePrefix}_animals_${stamp}.csv`, animalCsv(agg, measures), 'text/csv')}>
             Per-animal values (CSV)
           </button>
-          <button className="btn" onClick={() => download(`catwalk_statistics_${stamp}.csv`, statsCsv(results, agg.groups), 'text/csv')}>
+          <button className="btn" onClick={() => download(`${prog.filePrefix}_statistics_${stamp}.csv`, statsCsv(results, agg.groups), 'text/csv')}>
             Statistics table (CSV)
           </button>
-          <button className="btn" onClick={() => download(`catwalk_summary_${stamp}.md`, reportMarkdown(agg, results, cfg, opt), 'text/markdown')}>
+          <button className="btn" onClick={() => download(`${prog.filePrefix}_summary_${stamp}.md`, reportMarkdown(agg, results, cfg, opt), 'text/markdown')}>
             Written summary (Markdown)
           </button>
           <button className="btn" onClick={() => window.print()}>
@@ -81,7 +83,7 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
           </button>
         </div>
         <p className="small muted" style={{ marginTop: 10, marginBottom: 0 }}>
-          The per-animal file has one row per animal and timepoint (runs averaged{cfg.speedAdjust ? ', speed-adjusted' : ''}); it can be opened in Excel, Prism or R for
+          The per-animal file has one row per animal and timepoint ({prog.runsNoun} averaged{cfg.speedAdjust ? ', speed-adjusted' : ''}); it can be opened in Excel, Prism or R for
           further modelling, such as mixed models for repeated measures. Charts can be downloaded as SVG or PNG from each chart's header.
         </p>
       </div>
@@ -96,21 +98,21 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
             Parameters
             <select value={scope} onChange={(e) => setScopeAndSeed(e.target.value as PrismScope)}>
               <option value="custom">Choose parameters…</option>
-              <option value="key">Key: whole-body + front/hind means</option>
+              <option value="key">{prog.features.paws ? 'Key: whole-body + front/hind means' : 'Key parameters'}</option>
               <option value="significant">Changed vs control ({changedKeys.size})</option>
-              <option value="all">All, incl. each paw and asymmetry</option>
+              <option value="all">{prog.features.paws ? 'All, incl. each paw and asymmetry' : 'All parameters'}</option>
             </select>
           </label>
           <label className="field">
             Table layout
             <select value={effLayout} onChange={(e) => setLayout(e.target.value as PrismOptions['layout'])} disabled={!multiTime}>
-              <option value="column">Column tables{multiTime ? ' (one per timepoint)' : ''}</option>
-              {multiTime && <option value="grouped">Grouped tables (time × group)</option>}
+              <option value="column">Column tables{agg.times.length > 1 ? ' (one per timepoint)' : ''}</option>
+              {multiTime && <option value="grouped">Grouped tables ({[agg.times.length > 1 && 'time', byTrial && prog.runNoun].filter(Boolean).join(' / ')} × group)</option>}
               {multiTime && <option value="both">Both</option>}
             </select>
             <span className="hint">
               {multiTime
-                ? 'In grouped tables each animal keeps the same replicate subcolumn at every timepoint, so repeated-measures two-way ANOVA or mixed-effects analysis works directly.'
+                ? `In grouped tables each animal keeps the same replicate subcolumn at every ${byTrial ? `${prog.runNoun} and ` : ''}timepoint, so repeated-measures two-way ANOVA or mixed-effects analysis works directly.`
                 : 'Column tables suit t-tests, one-way ANOVA and scatter-dot plots.'}
             </span>
           </label>
@@ -130,7 +132,7 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
               </button>
             </div>
             <div className="prism-list">
-              {CATEGORY_ORDER.map((cat) => {
+              {program().categoryOrder.map((cat) => {
                 const list = visible.filter((m) => m.def.category === cat)
                 if (!list.length) return null
                 const allOn = list.every((m) => custom.has(m.key))
@@ -139,7 +141,7 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
                     <legend>
                       <label className="check small">
                         <input type="checkbox" checked={allOn} onChange={(e) => toggle(list.map((m) => m.key), e.target.checked)} />
-                        <span>{CATEGORY_LABELS[cat]}</span>
+                        <span>{program().categoryLabels[cat]}</span>
                       </label>
                     </legend>
                     {list.map((m: Measure) => (
@@ -168,13 +170,14 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
               Only the parameters you select are included.
             </li>
             <li>
-              <b>Column tables</b>: one column per group ({agg.groups.join(', ')}) with one value per animal (runs averaged). Use them for scatter-dot or bar
+              <b>Column tables</b>: one column per group ({agg.groups.join(', ')}) with one value per animal ({prog.runsNoun} averaged). Use them for scatter-dot or bar
               graphs, t-tests and one-way ANOVA.
             </li>
             {multiTime && (
               <li>
-                <b>Grouped tables</b>: rows are timepoints, columns are groups, and each animal is a replicate subcolumn that keeps its position at every
-                timepoint. Use them for time-course graphs and repeated-measures two-way ANOVA or mixed-effects analysis.
+                <b>Grouped tables</b>: rows are {byTrial ? (agg.times.length > 1 ? `timepoints (or ${prog.runsNoun} in the "by ${prog.runNoun}" tables)` : prog.runsNoun) : 'timepoints'}, columns are groups, and each animal is a replicate
+                subcolumn that keeps its position in every row. Use them for {byTrial ? 'learning curves, ' : ''}time-course graphs and repeated-measures two-way ANOVA or
+                mixed-effects analysis.
               </li>
             )}
             <li>

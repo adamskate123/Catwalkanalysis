@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
+import { program } from '../../programs'
 import { formatNum, formatP, type Measure, type MeasureResult } from '../../lib/analysis'
 import { changedMeasures, type Change } from '../../lib/interpret'
-import { CATEGORY_LABELS, CATEGORY_ORDER, type ParamDef } from '../../lib/catalog'
+import { type ParamDef } from '../../lib/catalog'
 import { MeasureDots, TimeCourse } from './figures'
 import type { TabProps } from './types'
 
@@ -127,12 +128,12 @@ export function Explore(props: TabProps & { selected: string | null; setSelected
         {time ? ` at ${time}` : ''}. Arrows show the direction.
       </p>
       {filtered.length === 0 && <p className="small muted">No parameters match.</p>}
-      {CATEGORY_ORDER.map((cat) => {
+      {program().categoryOrder.map((cat) => {
         const list = filtered.filter((e) => e.def.category === cat)
         if (!list.length) return null
         return (
           <div key={cat}>
-            <div className="cat">{CATEGORY_LABELS[cat]}</div>
+            <div className="cat">{program().categoryLabels[cat]}</div>
             <ul>
               {list.map((e) => (
                 <li key={e.id}>
@@ -168,7 +169,7 @@ export function Explore(props: TabProps & { selected: string | null; setSelected
         <div className="card">
           <h2 style={{ marginBottom: 4 }}>{current.label}</h2>
           <p className="small muted" style={{ marginBottom: 8 }}>
-            {CATEGORY_LABELS[d.category]}
+            {program().categoryLabels[d.category]}
             {d.unit ? ` · ${d.unit}` : ''}
             {cfg.speedAdjust ? ' · speed-adjusted' : ''}
           </p>
@@ -229,7 +230,7 @@ export function Explore(props: TabProps & { selected: string | null; setSelected
           </>
         )}
         <p className="small muted">
-          Dots are individual animals (runs averaged); black bars show mean ± SEM. Labels under groups give the Holm-adjusted p vs {cfg.controlGroup ?? 'the reference'}{' '}
+          Dots are individual animals ({program().runsNoun} averaged); black bars show mean ± SEM. Labels under groups give the Holm-adjusted p vs {cfg.controlGroup ?? 'the reference'}{' '}
           (* &lt; 0.05, ** &lt; 0.01, *** &lt; 0.001, ns = not significant).
         </p>
 

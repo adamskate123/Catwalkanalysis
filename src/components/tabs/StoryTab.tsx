@@ -1,3 +1,4 @@
+import { program } from '../../programs'
 import { useMemo, type ReactNode } from 'react'
 import { formatP, primaryComparison, type Measure } from '../../lib/analysis'
 import { download, safeName } from '../../lib/export'
@@ -169,7 +170,7 @@ export function StoryTab(props: TabProps) {
             <div className="row no-print">
               <PrismButton measures={ev.map((e) => e.result.measure)} name={f.domain.title} props={props} />
               <button className="btn ghost sm" onClick={() => onLearn('diseases')}>
-                Background on gait patterns
+                Background on {program().test} patterns
               </button>
             </div>
           </Chapter>

@@ -1,12 +1,39 @@
-# Gait Lab · CatWalk Analyzer
+# Behavior Lab · Gait, Rotarod, Open Field
 
-**Version 1.5.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 2.0.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
-A web app that turns **CatWalk XT** (Noldus) gait-analysis exports into structured graphs, statistics and a written phenotype summary, with a built-in tutorial on how CatWalk works and how its parameters change in models of neurological disease.
+A web app that turns rodent behavioural data into structured graphs, statistics and a written phenotype summary, with a built-in tutorial for each test. It contains three programs; switch between them by clicking the name and icon at the top left:
+
+| Program | Test | Data it reads |
+| --- | --- | --- |
+| **Gait Lab** | CatWalk XT gait analysis | CatWalk XT run/trial statistics |
+| **Rotarod Lab** | Rotarod motor coordination and learning | SDI Rotor-Rod exports; Excel/CSV; Prism 10 `.prism` |
+| **Open Field Lab** | Open field activity and anxiety-like behaviour | EthoVision XT statistics exports; Excel/CSV; Prism 10 `.prism` |
 
 It runs in any modern browser on **phones, tablets and desktops**, and can be installed as an app (Add to Home Screen / Install app). It works offline once loaded. **All processing happens on your device; files are never uploaded.**
 
-## Features
+## Programs
+
+- **Rotarod Lab** recognises latency to fall, rod speed at fall, distance and passive rotations. It averages trials per animal and day, and computes best, first and last trial and the first-to-last improvement for each animal. A **Learning curves** tab plots every trial of every day. Prism export adds "by trial" grouped tables for repeated-measures analysis. It flags impaired coordination and balance, reduced motor learning, and gripping instead of walking.
+- **Open Field Lab** recognises distance, velocity, time moving and immobile, centre time, entries and latency, periphery time, rearing, grooming, stereotypy and fecal boli, including EthoVision's long column names (`In zone Center / Center-point Cumulative Duration s`). Time bins become timepoints, so habituation shows under Over time. It flags hypo- and hyperactivity, anxiety-like centre avoidance, reduced centre avoidance and repetitive behaviour.
+- Everything below that is not specific to paws or walking speed applies to all three programs: Summary, Story, fingerprint, Parameters, Over time, filters, statistics, Prism export and saved experiments.
+
+## Importing Prism and Excel tables
+
+Besides instrument exports, every program reads:
+
+- **Prism 10 projects (`.prism`)**:
+  - The data-table title is the measure. An age or time window in it ("Latency 51-100 days", "P30") becomes the timepoint.
+  - Data-set titles are groups; sex and "n=" are read from them ("A477T Affected Males n=19" → group *A477T Affected*, sex *M*).
+  - Replicate subcolumns become trials.
+  - Tables whose titles lack a window but repeat the binned data ("Males", "Females", "all ages") are skipped.
+- **Prism-style spreadsheets**: one column (or block of subcolumns) per group, one row per animal; the sheet name is the measure.
+- **Long tables**: animal, group, …, a *Measure* column and a *Value* column.
+- **Wide tables**: one column per trial, day or time bin (`Trial 1`, `Day 2 Trial 3`, `0-5 min`).
+
+A "Prism tables" setting on the start screen chooses whether table rows are animals (subcolumns = trials) or trials/time bins (subcolumns = animals).
+
+## Gait Lab (CatWalk) features
 
 **Analyze**
 - Load one or more `.xlsx`, `.csv`, `.tsv` or `.txt` exports (run statistics, one row per run). Preamble lines and two-row Mean/StDev headers are handled, and ~50 CatWalk parameters are recognised across naming variants (`RF Stand (s)_Mean`, `RF_Stand_(s)_Mean`, `Stand_RF`, `Right Front Stand`…). Unrecognised numeric columns are still analysed.
@@ -40,6 +67,10 @@ Each analysis is saved as an **experiment** on your device and can grow over tim
 
 After classifying runs, export the **run statistics** (one row per run) to Excel or text. Include your independent variables (genotype, treatment, timepoint) and the animal/trial identifier. A demo file with the expected layout can be downloaded from the app's start screen. The **Try with demo data** button loads simulated data from a hypothetical gene-therapy study (WT, Model + Vehicle, Model + AAV at 4, 8 and 12 weeks).
 
+## References
+
+All sources behind the tutorials, phenotype patterns, statistics and file formats are listed in [REFERENCES.md](REFERENCES.md) and in the app under *References & sources* (footer). The list lives in `src/lib/references.ts`; after editing it, run `node scripts/references-md.mjs` to regenerate REFERENCES.md (a unit test checks they match).
+
 ## Development
 
 ```bash
@@ -50,7 +81,7 @@ npm run lint
 npm run build      # production build in dist/
 ```
 
-Stack: React + TypeScript + Vite, `read-excel-file` and `papaparse` for parsing, hand-written SVG charts and statistics (no server).
+Stack: React + TypeScript + Vite, `read-excel-file` and `papaparse` for parsing, `fflate` for Prism 10 files, hand-written SVG charts and statistics (no server).
 
 ## Versioning
 
@@ -69,4 +100,4 @@ A unit test checks that the latest changelog entry matches `package.json`.
 
 Automated interpretations are pattern-based aids for orientation, not diagnoses. Confirm them with study-specific hypotheses, histology and complementary behavioural tests. For definitive repeated-measures analyses, export the per-animal CSV and fit mixed models (for example with speed as a covariate).
 
-CatWalk is a trademark of Noldus Information Technology. This project is independent and is not affiliated with Noldus.
+CatWalk and EthoVision are trademarks of Noldus Information Technology; Rotor-Rod is a trademark of San Diego Instruments; Prism is a trademark of GraphPad Software. This project is independent and is not affiliated with any of them.

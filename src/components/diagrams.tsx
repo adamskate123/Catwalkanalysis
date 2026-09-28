@@ -298,3 +298,76 @@ export function IntensityDiagram() {
     </svg>
   )
 }
+
+export function RotarodDiagram() {
+  return (
+    <svg viewBox="0 0 420 210" role="img" aria-label="Schematic of a rotarod: mice walk on a rotating rod divided into lanes; the rod speeds up until each mouse falls onto a sensor plate below, which records the time and rod speed." fontFamily={FONT}>
+      {/* lanes */}
+      {[70, 170, 270, 370].map((x) => (
+        <rect key={x} x={x - 4} y={30} width={8} height={130} rx={2} fill={T2} opacity={0.35} />
+      ))}
+      {/* rod */}
+      <rect x={40} y={92} width={350} height={16} rx={8} fill={T2} opacity={0.8} />
+      {/* rotation arrow */}
+      <path d="M392 82 a 20 20 0 1 1 -2 34" fill="none" stroke={A} strokeWidth={2.5} strokeLinecap="round" />
+      <path d="M386 120 l 6 -5 l 1 8 z" fill={A} />
+      {/* mice on the rod */}
+      {[120, 220].map((x) => (
+        <g key={x} fill={T} opacity={0.85}>
+          <ellipse cx={x} cy={80} rx={24} ry={12} />
+          <ellipse cx={x + 22} cy={74} rx={9} ry={7} />
+          <path d={`M${x - 24} 82 C ${x - 44} 86, ${x - 50} 70, ${x - 60} 72`} stroke={T} strokeWidth={2} fill="none" strokeLinecap="round" />
+        </g>
+      ))}
+      {/* falling mouse */}
+      <g fill={T} opacity={0.45} transform="rotate(-25 320 140)">
+        <ellipse cx={320} cy={140} rx={20} ry={10} />
+        <ellipse cx={338} cy={135} rx={8} ry={6} />
+      </g>
+      <path d="M320 112 v 18" stroke={M} strokeWidth={1.5} strokeDasharray="3 3" />
+      {/* sensor plates */}
+      {[120, 220, 320].map((x) => (
+        <rect key={x} x={x - 40} y={165} width={80} height={8} rx={2} fill="#1baf7a" opacity={0.7} />
+      ))}
+      <text x={40} y={24} fontSize={11} fill={M}>
+        Rod accelerates, e.g. 4 → 40 rpm over 5 min
+      </text>
+      <text x={40} y={194} fontSize={11} fill={T2}>
+        Fall onto the plate stops the lane timer: latency (s) and rpm at fall
+      </text>
+    </svg>
+  )
+}
+
+export function ArenaDiagram() {
+  return (
+    <svg viewBox="0 0 420 210" role="img" aria-label="Schematic of an open field arena seen from above: a square box with a centre zone marked in the middle and the tracked path of a mouse that stays mostly near the walls." fontFamily={FONT}>
+      <rect x={110} y={10} width={190} height={190} rx={4} fill="none" stroke={T2} strokeWidth={3} />
+      <rect x={157} y={57} width={96} height={96} fill={A} opacity={0.1} stroke={A} strokeDasharray="5 4" />
+      <path
+        d="M130 180 C 125 120, 122 60, 140 30 S 230 22, 270 28 S 285 90, 282 140 S 250 184, 200 182 S 150 160, 175 120 S 215 80, 240 110 S 262 170, 280 178"
+        fill="none"
+        stroke={T}
+        strokeWidth={1.8}
+        opacity={0.7}
+        strokeLinecap="round"
+      />
+      <circle cx={280} cy={178} r={5} fill={T} />
+      <text x={205} y={108} fontSize={11} fill={A} textAnchor="middle">
+        centre zone
+      </text>
+      <text x={312} y={40} fontSize={11} fill={M}>
+        periphery
+      </text>
+      <text x={312} y={54} fontSize={11} fill={M}>
+        (near walls)
+      </text>
+      <text x={8} y={100} fontSize={11} fill={T2}>
+        Camera above
+      </text>
+      <text x={8} y={114} fontSize={11} fill={T2}>
+        tracks the path
+      </text>
+    </svg>
+  )
+}

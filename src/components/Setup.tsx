@@ -1,5 +1,5 @@
 import { DEFAULT_MAX_VARIATION, distinctValues, groupDefaults, type AnalysisConfig, type Measure } from '../lib/analysis'
-import { CATEGORY_LABELS, CATEGORY_ORDER } from '../lib/catalog'
+import { program } from '../programs'
 import type { InterpretOptions } from '../lib/interpret'
 import type { Dataset } from '../lib/parse'
 
@@ -44,11 +44,13 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
     </label>
   )
 
-  const byCat = CATEGORY_ORDER.map((cat) => ({
+  const byCat = program().categoryOrder.map((cat) => ({
     cat,
     n: new Set(measures.filter((m) => m.def.category === cat && !m.derived).map((m) => m.def.id + (m.variant ?? ''))).size,
   })).filter((x) => x.n > 0)
   const others = measures.filter((m) => m.def.category === 'other')
+  const prog = program()
+  const Runs = prog.runsNoun[0].toUpperCase() + prog.runsNoun.slice(1)
 
   return (
     <>
@@ -56,7 +58,7 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
         <h2>Columns</h2>
         <p className="small muted">These were detected automatically. Change them if the guess is wrong.</p>
         <div className="form-grid">
-          {colSelect('Animal ID', 'Runs with the same ID (and timepoint) are averaged into one value per animal.', cfg.subjectCol, (v) => update({ subjectCol: v }), allCols)}
+          {colSelect('Animal ID', `${Runs} with the same ID (and timepoint) are averaged into one value per animal.`, cfg.subjectCol, (v) => update({ subjectCol: v }), allCols)}
           {colSelect('Group', 'Genotype, treatment or cohort to compare.', cfg.groupCol, (v) => {
             const d = groupDefaults(distinctValues(ds, v))
             update({ groupCol: v, ...d, excludedGroups: [] })
@@ -64,7 +66,7 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
           {colSelect('Timepoint', 'Optional. Each timepoint is analysed separately and plotted over time.', cfg.timeCol, (v) =>
             update({ timeCol: v, timeOrder: distinctValues(ds, v) }),
           )}
-          {colSelect('Compliant run flag', 'Optional. CatWalk marks runs that meet your speed-variation and duration criteria.', cfg.compliantCol, (v) =>
+          {prog.features.speed && colSelect('Compliant run flag', 'Optional. CatWalk marks runs that meet your speed-variation and duration criteria.', cfg.compliantCol, (v) =>
             update({ compliantCol: v, onlyCompliant: Boolean(v) }),
           )}
         </div>
@@ -275,9 +277,9 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
             <span className="hint">Pairwise p-values are Holm-adjusted within each parameter; q-values control the false discovery rate across parameters.</span>
           </label>
           <label className="field">
-            Minimum runs per animal
+            Minimum {prog.runsNoun} per animal
             <input type="number" min={1} max={20} value={cfg.minRuns} onChange={(e) => update({ minRuns: Math.max(1, Number(e.target.value) || 1) })} />
-            <span className="hint">Animals with fewer usable runs are left out.</span>
+            <span className="hint">Animals with fewer usable {prog.runsNoun} are left out.</span>
           </label>
           <label className="field">
             Significance level (α)
@@ -307,7 +309,7 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
               Also require FDR q &lt; α across all parameters <span className="muted">(stricter; recommended for exploratory screens of many parameters)</span>
             </span>
           </label>
-          <label className="check">
+          {prog.features.speed && <label className="check">
             <input type="checkbox" checked={cfg.speedAdjust} disabled={!hasSpeed} onChange={(e) => update({ speedAdjust: e.target.checked })} />
             <span>
               Adjust all parameters for walking speed{' '}
@@ -320,7 +322,7 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
                 )
               </span>
             </span>
-          </label>
+          </label>}
         </div>
       </div>
 
@@ -329,18 +331,22 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
         <div className="chips">
           {byCat.map(({ cat, n }) => (
             <span key={cat} className="chip">
-              {CATEGORY_LABELS[cat]}: <b>{n}</b>
+              {prog.categoryLabels[cat] ?? cat}: <b>{n}</b>
             </span>
           ))}
         </div>
         {others.length > 0 && (
           <p className="small muted" style={{ marginTop: 10 }}>
-            Numeric columns not matched to a known CatWalk parameter (still analysed): {others.map((m) => m.label).join(', ')}
+            Numeric columns not matched to a known {prog.test} parameter (still analysed): {others.map((m) => m.label).join(', ')}
           </p>
         )}
         <p className="small muted" style={{ marginTop: 10 }}>
-          When both Mean and StDev columns exist for a parameter, the Mean column is used. Derived values (front/hind means and left–right asymmetry indices) are
-          calculated per animal for every parameter measured on all four paws.
+          When both Mean and StDev columns exist for a parameter, the Mean column is used.{' '}
+          {prog.features.paws
+            ? 'Derived values (front/hind means and left–right asymmetry indices) are calculated per animal for every parameter measured on all four paws.'
+            : prog.trialDerived
+              ? `Best, first and last ${prog.runNoun} and the improvement from first to last are calculated per animal and timepoint when each row is one ${prog.runNoun}.`
+              : ''}
         </p>
       </div>
     </>

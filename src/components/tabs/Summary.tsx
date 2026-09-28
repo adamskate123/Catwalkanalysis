@@ -1,3 +1,4 @@
+import { program } from '../../programs'
 import { useMemo, useState } from 'react'
 import { formatNum, formatP, primaryComparison } from '../../lib/analysis'
 import { describeEvidence, interpret, isSignificant } from '../../lib/interpret'
@@ -57,7 +58,7 @@ export function Summary(props: TabProps & { goSetup: () => void }) {
           <div className="sub">{agg.groups.length} group{agg.groups.length === 1 ? '' : 's'}</div>
         </div>
         <div className="tile">
-          <div className="label">Runs used</div>
+          <div className="label">{program().runsNoun[0].toUpperCase() + program().runsNoun.slice(1)} used</div>
           <div className="value">{agg.rowsUsed.toLocaleString()}</div>
           <div className="sub">
             {[
@@ -72,7 +73,7 @@ export function Summary(props: TabProps & { goSetup: () => void }) {
         <div className="tile">
           <div className="label">Parameters analysed</div>
           <div className="value">{tr.results.length}</div>
-          <div className="sub">incl. front/hind means and asymmetry</div>
+          <div className="sub">{program().features.paws ? 'incl. front/hind means and asymmetry' : program().trialDerived && agg.trials.length ? `incl. best/first/last ${program().runNoun}` : 'recognised and other numeric columns'}</div>
         </div>
         <div className="tile">
           <div className="label">Changed vs {cfg.diseaseGroup ? 'control' : 'reference'}</div>

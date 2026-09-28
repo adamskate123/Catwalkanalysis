@@ -1,9 +1,10 @@
 // Saved experiments: a named collection of loaded files plus analysis settings,
-// which can grow over time as new CatWalk exports are added.
+// which can grow over time as new exports are added.
 
 import { distinctValues, naturalCompare, type AnalysisConfig, autoConfig } from './analysis'
 import type { InterpretOptions } from './interpret'
 import { isKeyTable, type Dataset, type ParsedTable } from './parse'
+import type { ProgramId } from '../programs'
 
 export const SESSION_COL = 'Session'
 export const BUNDLE_FORMAT = 'gaitlab-experiment'
@@ -21,6 +22,8 @@ export interface StoredFile {
 export interface Experiment {
   id: string
   name: string
+  /** Test program the data belongs to; experiments saved before v2.0 are CatWalk. */
+  program?: ProgramId
   createdAt: string
   updatedAt: string
   files: StoredFile[]
@@ -33,6 +36,7 @@ export interface Experiment {
 export interface ExperimentSummary {
   id: string
   name: string
+  program: ProgramId
   createdAt: string
   updatedAt: string
   files: number
@@ -49,6 +53,7 @@ export function summarise(e: Experiment): ExperimentSummary {
   return {
     id: e.id,
     name: e.name,
+    program: e.program ?? 'catwalk',
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
     files: e.files.length,
@@ -81,7 +86,7 @@ export function suggestName(tables: ParsedTable[], fallback: string): string {
     const v = i >= 0 ? t.rows.find((r) => r[i] !== null)?.[i] : null
     if (typeof v === 'string' && v.trim()) return v.trim()
   }
-  return fallback.replace(/\.(xlsx|xlsm|csv|tsv|txt)$/i, '').replace(/_(Run|Trial)Statistics$/i, '')
+  return fallback.replace(/\.(xlsx|xlsm|csv|tsv|txt|prism)$/i, '').replace(/_(Run|Trial)Statistics$/i, '')
 }
 
 /**
