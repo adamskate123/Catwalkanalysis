@@ -1,8 +1,8 @@
 import { program } from '../../programs'
 import { useMemo, useState } from 'react'
 import { formatNum, formatP, primaryComparison } from '../../lib/analysis'
-import { describeEvidence, interpret, isSignificant } from '../../lib/interpret'
-import { dataWarnings, narrative, topChanges } from '../../lib/report'
+import { describeEvidence, interpret, isReported, isSignificant } from '../../lib/interpret'
+import { dataWarnings, narrative, topChanges, unitNoun } from '../../lib/report'
 import type { TabProps } from './types'
 
 function Md({ text }: { text: string }) {
@@ -58,7 +58,7 @@ export function Summary(props: TabProps & { goSetup: () => void }) {
           <div className="sub">{agg.groups.length} group{agg.groups.length === 1 ? '' : 's'}</div>
         </div>
         <div className="tile">
-          <div className="label">{program().runsNoun[0].toUpperCase() + program().runsNoun.slice(1)} used</div>
+          <div className="label">{unitNoun(agg)[0].toUpperCase() + unitNoun(agg).slice(1)} used</div>
           <div className="value">{agg.rowsUsed.toLocaleString()}</div>
           <div className="sub">
             {[
@@ -129,7 +129,7 @@ export function Summary(props: TabProps & { goSetup: () => void }) {
             <div className="domain" key={f.domain.id}>
               <header>
                 <h4>{f.domain.title}</h4>
-                <span className={`badge${f.supporting.length >= 2 ? ' strong' : ''}`}>
+                <span className={`badge${isReported(f) ? ' strong' : ''}`}>
                   {f.supporting.length} of {f.available} markers
                 </span>
               </header>

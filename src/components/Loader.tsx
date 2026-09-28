@@ -224,7 +224,7 @@ export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImp
                       {f.tables.length > 1 ? ` from ${f.tables.length} sheets` : ''} ·{' '}
                       {f.isKey
                         ? 'animal key'
-                        : `${f.tables[0]?.headers.filter((h) => prog.matchColumn(h)).length} parameters recognised`}
+                        : ((n) => `${n} parameter${n === 1 ? '' : 's'} recognised`)(f.tables[0]?.headers.filter((h) => prog.matchColumn(h)).length ?? 0)}
                     </span>
                   </span>
                   <button className="btn ghost sm" onClick={() => setFiles(files.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`}>

@@ -1,5 +1,6 @@
 import { program } from '../programs'
 import { DEFAULT_MAX_VARIATION } from './analysis'
+import { toNumber } from './parse'
 import type { Dataset } from './parse'
 import {
   formatNum,
@@ -11,7 +12,7 @@ import {
   type MeasureResult,
   type TimeResults,
 } from './analysis'
-import { describeEvidence, interpret, isSignificant, type DomainFinding, type InterpretOptions } from './interpret'
+import { describeEvidence, interpret, isReported, isSignificant, type DomainFinding, type InterpretOptions } from './interpret'
 
 export interface Warning {
   level: 'info' | 'warning'
@@ -22,10 +23,28 @@ function describeCounts(m: Map<string, number>): string {
   return [...m].map(([k, n]) => `${n} ${k}`).join(', ')
 }
 
+/** Share of latency values at the maximum (a trial cut-off), when that share is large. */
+export function ceilingShare(ds: Dataset): { count: number; n: number; max: number } | null {
+  if (program().id !== 'rotarod') return null
+  const i = ds.columns.findIndex((c) => c.match?.paramId === 'latency')
+  if (i < 0) return null
+  const vals = ds.rows.map((r) => toNumber(r[i])).filter((v): v is number => v !== null && Number.isFinite(v))
+  if (vals.length < 20) return null
+  const max = Math.max(...vals)
+  const count = vals.filter((v) => v === max).length
+  return count / vals.length >= 0.1 && count >= 5 ? { count, n: vals.length, max } : null
+}
+
 export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, cfg: AnalysisConfig, ds?: Dataset): Warning[] {
   const w: Warning[] = []
   if (ds) {
     for (const n of ds.notices) w.push({ level: 'info', text: n })
+    const ceiling = ceilingShare(ds)
+    if (ceiling)
+      w.push({
+        level: 'warning',
+        text: `${ceiling.count} of ${ceiling.n} rotarod values (${Math.round((ceiling.count / ceiling.n) * 100)}%) sit exactly at ${+ceiling.max.toFixed(2)} s, which looks like the trial cut-off. Animals that reach the cut-off can't score higher, so differences among good performers are compressed and data are skewed. Consider the non-parametric tests (Setup → Statistics) and a longer maximum trial time or faster acceleration in future cohorts.`,
+      })
     // Acquisition settings must be constant for intensities and areas to be comparable.
     const varying = ds.columns.filter((c) => c.meta === 'equipment' && c.distinct > 1).map((c) => c.name)
     if (varying.length)
@@ -49,7 +68,8 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
     const subs = agg.subjects.filter((s) => s.time === tr.time)
     // Sex composition per group
     if (subs.some((s) => s.sex)) {
-      const byGroup = agg.groups.map((g) => {
+      // Groups with no animals at this timepoint say nothing about balance.
+      const byGroup = agg.groups.filter((g) => subs.some((s) => s.group === g)).map((g) => {
         const m = new Map<string, number>()
         for (const s of subs.filter((x) => x.group === g)) m.set(s.sex ?? '?', (m.get(s.sex ?? '?') ?? 0) + 1)
         return { g, m }
@@ -59,7 +79,7 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
       if (unbalanced && sexes.size > 1)
         w.push({
           level: 'warning',
-          text: `Sex is not balanced across groups (${byGroup.map(({ g, m }) => `${g}: ${describeCounts(m)}`).join('; ')}). Sex affects body size, print area and speed; consider filtering to one sex under Setup → Filters.`,
+          text: `Sex is not balanced across groups (${byGroup.map(({ g, m }) => `${g}: ${describeCounts(m)}`).join('; ')}). ${program().features.paws ? 'Sex affects body size, print area and speed' : 'Sex affects body weight and performance'}; consider filtering to one sex under Setup → Filters.`,
         })
     }
     // Age differences
@@ -94,7 +114,7 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
   } else if (program().features.speed) {
     w.push({ level: 'info', text: 'No average-speed column was found, so speed adjustment is unavailable.' })
   }
-  const repeated = program().features.speed || Boolean(program().trialDerived)
+  const repeated = program().features.speed || agg.trials.length > 0
   if (repeated && agg.subjects.some((s) => s.nRuns < 3) && cfg.subjectCol) {
     const k = agg.subjects.filter((s) => s.nRuns < 3).length
     w.push({
@@ -117,6 +137,11 @@ export function topChanges(tr: TimeResults, cfg: AnalysisConfig, opt: InterpretO
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 
+/** What one data row is: a run/trial, or just a value when rows are repeated measurements (e.g. Prism replicate subcolumns). */
+export function unitNoun(agg: AggregateResult): string {
+  return program().features.speed || agg.trials.length > 0 || !program().trialDerived ? program().runsNoun : 'values'
+}
+
 export function narrative(
   agg: AggregateResult,
   tr: TimeResults,
@@ -126,25 +151,46 @@ export function narrative(
 ): string[] {
   const out: string[] = []
   const subs = agg.subjects.filter((s) => s.time === tr.time)
-  const counts = agg.groups.map((g) => `${g} (n = ${subs.filter((s) => s.group === g).length})`).join(', ')
+  const counts = agg.groups
+    .map((g) => ({ g, n: subs.filter((s) => s.group === g).length }))
+    .filter((x) => x.n > 0)
+    .map((x) => `${x.g} (n = ${x.n})`)
+    .join(', ')
   const when = tr.time ? ` at ${tr.time}` : ''
   out.push(
-    `${subs.length} animals${when} were analysed: ${counts}. ${cfg.subjectCol ? `${cap(program().runsNoun)} were averaged per animal (${formatNum(subs.reduce((s, x) => s + x.nRuns, 0) / Math.max(1, subs.length), 2)} ${program().runsNoun} per animal on average)` : 'Each row was treated as one animal'}${cfg.onlyCompliant && cfg.compliantCol ? ' and only compliant runs were used' : ''}${cfg.maxVariation !== null ? `; runs with more than ${cfg.maxVariation}% speed variation were excluded` : ''}${cfg.filters.length ? `; analysis restricted to ${cfg.filters.map((f) => `${f.col} = ${f.values.join(' or ')}`).join(', ')}` : ''}.${cfg.speedAdjust ? ' Values were adjusted to the mean walking speed using a pooled within-animal regression on speed.' : ''}`,
+    `${subs.length} animals${when} were analysed: ${counts}. ${cfg.subjectCol ? `${cap(unitNoun(agg))} were averaged per animal (${formatNum(subs.reduce((s, x) => s + x.nRuns, 0) / Math.max(1, subs.length), 2)} ${unitNoun(agg)} per animal on average)` : 'Each row was treated as one animal'}${cfg.onlyCompliant && cfg.compliantCol ? ' and only compliant runs were used' : ''}${cfg.maxVariation !== null ? `; runs with more than ${cfg.maxVariation}% speed variation were excluded` : ''}${cfg.filters.length ? `; analysis restricted to ${cfg.filters.map((f) => `${f.col} = ${f.values.join(' or ')}`).join(', ')}` : ''}.${cfg.speedAdjust ? ' Values were adjusted to the mean walking speed using a pooled within-animal regression on speed.' : ''}`,
   )
   const primaryRef = cfg.diseaseGroup ? `${cfg.diseaseGroup} vs ${cfg.controlGroup}` : `each group vs ${cfg.controlGroup ?? 'the reference group'}`
-  const nSig = tr.results.filter((r) => {
-    const c = primaryComparison(r, cfg)
-    return c && isSignificant(r, c, opt)
-  }).length
-  out.push(
-    `Comparing ${primaryRef} with ${cfg.test === 'parametric' ? "Welch's t-test" : 'the Mann–Whitney U test'}, ${nSig} of ${tr.results.length} parameters met the criteria (p < ${opt.alpha}${opt.useFdr ? ', FDR q < ' + opt.alpha : ''}, |Hedges g| ≥ ${opt.minEffect}).`,
-  )
-  const strong = findings.filter((f) => f.supporting.length >= 2)
+  const criteria = `p < ${opt.alpha}${opt.useFdr ? ', FDR q < ' + opt.alpha : ''}, |Hedges g| ≥ ${opt.minEffect}`
+  const testName = cfg.test === 'parametric' ? "Welch's t-test" : 'the Mann–Whitney U test'
+  const plural = (n: number) => `${n} of ${tr.results.length} parameter${tr.results.length === 1 ? '' : 's'}`
+  let nSig = 0
+  if (cfg.diseaseGroup) {
+    nSig = tr.results.filter((r) => {
+      const c = primaryComparison(r, cfg)
+      return c && isSignificant(r, c, opt)
+    }).length
+    out.push(`Comparing ${primaryRef} with ${testName}, ${plural(nSig)} met the criteria (${criteria}).`)
+  } else {
+    // Every group is compared with the control; report how many parameters changed in each.
+    const perGroup = agg.groups
+      .filter((g) => g !== cfg.controlGroup)
+      .map((g) => ({
+        g,
+        n: tr.results.filter((r) => r.comparisons.some((c) => c.group === g && c.reference === cfg.controlGroup && isSignificant(r, c, opt))).length,
+      }))
+    nSig = tr.results.filter((r) => r.comparisons.some((c) => c.reference === cfg.controlGroup && isSignificant(r, c, opt))).length
+    const hits = perGroup.filter((x) => x.n > 0)
+    out.push(
+      `Comparing ${primaryRef} with ${testName}, ${plural(nSig)} met the criteria (${criteria}) in at least one group${hits.length ? `: ${hits.map((x) => `${x.g} ${x.n}`).join(', ')}` : ''}.`,
+    )
+  }
+  const strong = findings.filter(isReported)
   if (strong.length) {
     for (const f of strong.slice(0, 3)) {
       const side = f.side ? ` The ${f.side} side is more affected.` : ''
       out.push(
-        `The pattern is consistent with **${f.domain.title.toLowerCase()}** (${f.supporting.length} supporting parameters: ${f.supporting
+        `The pattern is consistent with **${f.domain.title.toLowerCase()}** (${f.supporting.length} supporting parameter${f.supporting.length === 1 ? '' : 's'}: ${f.supporting
           .slice(0, 4)
           .map(describeEvidence)
           .join('; ')}${f.supporting.length > 4 ? '; …' : ''}).${side} This pattern is typical of ${f.domain.conditions.charAt(0).toLowerCase() + f.domain.conditions.slice(1)}`,

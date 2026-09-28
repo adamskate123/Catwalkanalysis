@@ -249,7 +249,7 @@ function OutcomeLine({ label, o, base }: { label: string; o: Outcome; base: Outc
   return (
     <span>
       {label}: {o.animals} animals{d(o.animals, base.animals)}, {o.changed} changed parameters{d(o.changed, base.changed)}
-      {o.patterns.length ? `; patterns: ${o.patterns.join(', ')}` : '; no pattern with 2+ markers'}
+      {o.patterns.length ? `; patterns: ${o.patterns.join(', ')}` : '; no pattern reported'}
     </span>
   )
 }

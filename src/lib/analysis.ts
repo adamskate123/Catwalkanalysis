@@ -93,7 +93,7 @@ export function buildMeasures(ds: Dataset): Measure[] {
     }
   }
   // Per-animal summaries across trials (rotarod best/first/last trial), when rows are trials.
-  if (ds.columns.some((c) => c.meta === 'run')) {
+  if (ds.columns.some(isTrialColumn)) {
     for (const td of program().trialDerived ?? []) {
       const src = measures.find((m) => m.def.id === td.from && m.col !== undefined && !m.paw && !m.variant)
       const def = paramById(td.id)
@@ -180,12 +180,19 @@ export function distinctValues(ds: Dataset, name: string | null): string[] {
   return [...s].sort(naturalCompare)
 }
 
+/** A run/trial column with an order (not unordered replicate subcolumns from a Prism table). */
+export const isTrialColumn = (c: { meta: string | null; name: string }) => c.meta === 'run' && !/^replicate\b/i.test(c.name.trim())
+
 const CONTROL_HINT = /^(wt|wild[\s-]?type|control|ctrl|sham|naive|vehicle|veh|healthy|\+\/\+|het)$/i
 const CONTROL_HINT_LOOSE = /(wt|wild[\s-]?type|control|ctrl|sham|naive)/i
 const DISEASE_HINT = /(vehicle|veh|pbs|saline|untreated|ko|-\/-|mutant|model|lesion|disease)/i
 
 export function groupDefaults(groups: string[]): { controlGroup: string | null; diseaseGroup: string | null; groupOrder: string[] } {
-  const control = groups.find((g) => CONTROL_HINT.test(g)) ?? groups.find((g) => CONTROL_HINT_LOOSE.test(g)) ?? groups[0] ?? null
+  // Among loose matches ("Jax WT", "EIF Jax WT", "New Jax WT") the plainest, shortest name is the main control.
+  const loose = groups.filter((g) => CONTROL_HINT_LOOSE.test(g)).sort((a, b) => a.length - b.length)
+  // Wild-type beats other control-like names (het, sham, vehicle) when several are present.
+  const exact = groups.filter((g) => CONTROL_HINT.test(g)).sort((a, b) => Number(!/^(wt|wild[\s-]?type|\+\/\+)$/i.test(a)) - Number(!/^(wt|wild[\s-]?type|\+\/\+)$/i.test(b)))
+  const control = exact[0] ?? loose[0] ?? groups[0] ?? null
   const disease =
     groups.length >= 3 ? (groups.find((g) => g !== control && DISEASE_HINT.test(g) && !/aav|treat|drug|gene|rescue/i.test(g)) ?? null) : null
   return {
@@ -304,6 +311,8 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
   const sexi = ds.columns.findIndex((c) => c.meta === 'sex')
   const agei = ds.columns.findIndex((c) => /^age\b/i.test(c.name) && c.numericShare > 0.8)
   const runi = ds.columns.findIndex((c) => c.meta === 'run')
+  // Replicate subcolumns (repeated measurements with no order) give no learning curve.
+  const triali = ds.columns.findIndex(isTrialColumn)
   const filters = cfg.filters.map((f) => ({ i: colIndex(ds, f.col), values: new Set(f.values) })).filter((f) => f.i >= 0)
   const raw = measures.filter((m) => m.col !== undefined)
 
@@ -355,7 +364,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       sex: sexi >= 0 ? cellText(r[sexi]) || undefined : undefined,
       age: agei >= 0 ? (toNumber(r[agei]) ?? undefined) : undefined,
       order: runi >= 0 ? runOrder(r[runi], idx) : idx,
-      trial: runi >= 0 ? cellText(r[runi]) : '',
+      trial: triali >= 0 ? cellText(r[triali]) : '',
     })
   })
 
@@ -380,7 +389,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
   // Average runs per subject × group × time
   const bySubject = new Map<string, Row[]>()
   for (const r of rows) {
-    const k = `${r.subject}\u0000${r.group}\u0000${r.time}`
+    const k = `${r.subject}\u0000${r.group}\u0000${r.time}\u0000${r.sex ?? ''}`
     const arr = bySubject.get(k) ?? []
     arr.push(r)
     bySubject.set(k, arr)
@@ -423,7 +432,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     groups,
     times,
     trials:
-      runi >= 0
+      triali >= 0
         ? rows
             .filter((r) => r.trial && subjects.some((s) => s.id === r.subject && s.group === r.group && s.time === r.time))
             .map((r) => ({ id: r.subject, group: r.group, time: r.time, trial: r.trial, order: r.order, values: Object.fromEntries(raw.map((m, j) => [m.key, r.v[j]])) }))

@@ -3,6 +3,34 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-09-28
+
+Tested against a real Prism 10.6 rotarod project with per-sex and pooled age-binned sheets.
+
+### Added
+
+- **Sex from sheet titles.** "Rotarod - Males 50 days" gives measure *Rotarod*, timepoint *50 days* and sex *M*, so per-sex sheets of the same measure form one column. Sheets naming both sexes ("Male vs Female") give no sex.
+- **Pooled and per-sex copies are combined, not double-counted.** Animals with an ID (ear tag) are matched across tables by ID and timepoint.
+  - Sex and group come from the sex-specific sheet, whose titles are more reliable than a pooled sheet labelled "Males" for every animal.
+  - The same tag in a male and a female sheet stays two animals.
+  - The app notes how many values were repeated and whether any differed.
+- **Checks shown when a Prism file is loaded:**
+  - group titles whose "n=" no longer matches the animals in the table;
+  - animals listed under different groups in different sheets (e.g. "New Jax WT" in the per-sex sheet vs "Jax WT" in the pooled sheet);
+  - Prism floating notes attached to sheets (e.g. animals necropsied before a session).
+- **Ceiling warning (rotarod):** flags when many latencies sit exactly at the trial cut-off (e.g. 90 s), with advice on tests and protocol.
+
+### Changed
+
+- **Prism replicate subcolumns are averaged** as repeated values of the same animal (e.g. two sessions near the target age). They are no longer treated as trials. Subcolumns titled "Trial 1", "Trial 2"… are still read as trials, with best/first/last trial and improvement.
+- Results open on the timepoint with the most animals, instead of always the last one.
+- The written summary counts parameters that changed in **any** group vs control and names the groups. It previously said "each group" but counted only the first.
+- A phenotype pattern is reported when at least two of its markers change, or all of them when fewer than two were measured, so a latency-only rotarod file can still be summarised.
+- Wild-type is preferred as the control over other control-like names ("Het", "EIF Jax WT", "New Jax WT").
+- Groups with no animals at a timepoint are left out of the summary and sex-balance text.
+- The sex-balance warning no longer mentions paw print area outside Gait Lab.
+- The program name no longer truncates in the header on wide screens.
+
 ## [2.0.0] - 2026-09-28
 
 ### Added

@@ -59,17 +59,32 @@ const TIME_RE = new RegExp(
   'i',
 )
 
-/** Splits a sheet title into the measure name and an age/time window, if any. */
-export function splitSheetTitle(title: string): { measure: string; time: string | null } {
-  const m = TIME_RE.exec(title)
-  if (!m) return { measure: title.trim(), time: null }
-  const time = m[1].replace(/\s+/g, ' ').trim()
-  const measure = (title.slice(0, m.index) + ' ' + title.slice(m.index + m[0].length))
+const SEX_PAIR = /\b(males?\s*(?:vs\.?|versus|and|&|\+|\/)\s*females?|females?\s*(?:vs\.?|versus|and|&|\+|\/)\s*males?|both\s+sexes|m\s*(?:vs\.?|\/|\+)\s*f)\b/i
+
+/**
+ * Splits a sheet title into the measure name, an age/time window and a sex, if
+ * any: "Rotarod - Males 50 days" → measure "Rotarod", time "50 days", sex "M".
+ * Titles naming both sexes ("Male vs Female") give no sex.
+ */
+export function splitSheetTitle(title: string): { measure: string; time: string | null; sex: string | null } {
+  let rest = title
+  let time: string | null = null
+  const m = TIME_RE.exec(rest)
+  if (m) {
+    time = m[1].replace(/\s+/g, ' ').trim()
+    rest = rest.slice(0, m.index) + ' ' + rest.slice(m.index + m[0].length)
+  }
+  let sex: string | null = null
+  if (SEX_PAIR.test(rest)) rest = rest.replace(SEX_PAIR, ' ')
+  else if (/\bfemales?\b/i.test(rest)) sex = 'F'
+  else if (/\bmales?\b/i.test(rest)) sex = 'M'
+  rest = rest.replace(/\b(fe)?males?\b/gi, ' ')
+  const measure = rest
     .replace(/[()[\]]/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/^[\s,;:_\-–]+|[\s,;:_\-–]+$/g, '')
     .trim()
-  return { measure, time }
+  return { measure, time, sex }
 }
 
 const baseName = (file: string) => file.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim()
@@ -83,47 +98,72 @@ interface Block {
   title: string
   /** rows × subcolumns */
   values: (number | null)[][]
+  /** Subcolumn titles, when the table has them (ear tags, "Trial 1"…). */
+  subTitles?: (string | null)[]
 }
+
+type AxisKind = 'trial' | 'replicate' | 'row'
 
 interface RecordRow {
   animal: string
+  /** The ID is a real label (row or subcolumn title) rather than a position. */
+  labelled: boolean
   group: string
   sex: string | null
+  /** Sex came from the sheet title ("… Males …"), which beats a group title. */
+  sexFromSheet: boolean
   time: string | null
   axis: string | number | null
+  axisKind: AxisKind | null
   measure: string
   value: number
 }
 
-function runColumn(): string {
-  return program().id === 'rotarod' ? 'Trial' : 'Replicate'
+interface Context {
+  measure: string
+  time: string | null
+  /** Sex stated in the sheet title. */
+  sex: string | null
+  layout: 'animals' | 'trials'
 }
 
-function blockRecords(
-  blocks: Block[],
-  rowLabels: (string | null)[],
-  measure: string,
-  time: string | null,
-  layout: 'animals' | 'trials',
-): RecordRow[] {
+const TRIAL_TITLE = /^(?:trial|t|run)\s*[-_#]?\s*(\d+)$/i
+const isText = (s: string | null | undefined): s is string => Boolean(s) && parseNumber(s!) === null
+
+function blockRecords(blocks: Block[], rowLabels: (string | null)[], ctx: Context): RecordRow[] {
   const out: RecordRow[] = []
   // Prism row titles label the whole row. They identify an animal only when the
   // row holds values for a single group (one row per animal).
   const groupsInRow = rowLabels.map((_, i) => blocks.filter((b) => b.values[i]?.some((v) => v !== null)).length)
   for (const b of blocks) {
-    const { group, sex } = parseGroupTitle(b.title)
+    const parsed = parseGroupTitle(b.title)
+    const group = parsed.group
+    const sex = ctx.sex ?? parsed.sex
+    const sexFromSheet = Boolean(ctx.sex)
+    const tag = `${group}${sex ? ' ' + sex : ''}`
     const reps = Math.max(0, ...b.values.map((r) => r.length))
+    // Subcolumns titled "Trial 1", "T2"… are trials; otherwise they are repeated
+    // measurements of the same animal (e.g. two sessions near the target age) and are averaged.
+    const trialNo = (k: number) => {
+      const m = TRIAL_TITLE.exec((b.subTitles?.[k] ?? '').trim())
+      return m ? Number(m[1]) : null
+    }
+    const subsAreTrials = reps > 1 && Array.from({ length: reps }, (_, k) => trialNo(k)).some((x) => x !== null)
     b.values.forEach((row, i) => {
       const label = rowLabels[i]
       row.forEach((v, k) => {
         if (v === null) return
-        if (layout === 'animals') {
-          const tag = `${group}${sex ? ' ' + sex : ''}`
-          const id = !label ? `${tag} #${i + 1}` : parseNumber(label) !== null ? `${tag} #${label}` : groupsInRow[i] > 1 ? `${tag} ${label}` : label
-          out.push({ animal: id, group, sex, time, axis: reps > 1 ? k + 1 : null, measure, value: v })
+        const base = { group, sex, sexFromSheet, time: ctx.time, measure: ctx.measure, value: v }
+        if (ctx.layout === 'animals') {
+          const labelled = isText(label) && groupsInRow[i] <= 1
+          const id = !label ? `${tag} #${i + 1}` : !isText(label) ? `${tag} #${label}` : groupsInRow[i] > 1 ? `${tag} ${label}` : label
+          const axisKind: AxisKind | null = reps > 1 ? (subsAreTrials ? 'trial' : 'replicate') : null
+          out.push({ ...base, animal: id, labelled, axis: axisKind ? (subsAreTrials ? (trialNo(k) ?? k + 1) : k + 1) : null, axisKind })
         } else {
+          const sub = b.subTitles?.[k]
+          const labelled = isText(sub)
           const axis = label ? (parseNumber(label) ?? label) : i + 1
-          out.push({ animal: `${group}${sex ? ' ' + sex : ''} #${k + 1}`, group, sex, time, axis, measure, value: v })
+          out.push({ ...base, animal: labelled ? sub!.trim() : `${tag} #${k + 1}`, labelled, axis, axisKind: 'row' })
         }
       })
     })
@@ -131,26 +171,86 @@ function blockRecords(
   return out
 }
 
-/** Joins records into one table: one row per animal × time × trial, one column per measure. */
-function recordsToSheet(records: RecordRow[], file: string, layout: 'animals' | 'trials', notes: string[]): RawSheet {
-  const axisName = layout === 'trials' ? program().rowAxis : runColumn()
+function axisColumn(kind: AxisKind): string {
+  if (kind === 'row') return program().rowAxis
+  return kind === 'trial' ? 'Trial' : 'Replicate'
+}
+
+/**
+ * Joins records into one table: one row per animal × time × trial, one column
+ * per measure. Animals with a real ID are matched across tables by that ID, so
+ * pooled and per-sex copies of the same data are combined rather than counted twice.
+ */
+function recordsToSheet(records: RecordRow[], file: string, notes: string[]): RawSheet {
+  const kinds = (['trial', 'replicate', 'row'] as AxisKind[]).filter((k) => records.some((r) => r.axisKind === k))
+  const axisCols = kinds.map(axisColumn).filter((c, i, a) => a.indexOf(c) === i)
   const hasSex = records.some((r) => r.sex)
   const hasTime = records.some((r) => r.time)
-  const hasAxis = records.some((r) => r.axis !== null)
-  const sameCol = hasTime && hasAxis && axisName === 'Time point'
+  // A "Time point" row axis (CatWalk) folds into the time column.
+  const sameCol = hasTime && axisCols.includes('Time point')
+  const extra = axisCols.filter((c) => !(sameCol && c === 'Time point'))
   const measures: string[] = []
   for (const r of records) if (!measures.includes(r.measure)) measures.push(r.measure)
-  const headers = ['Animal', 'Group', ...(hasSex ? ['Sex'] : []), ...(hasTime ? ['Time point'] : []), ...(hasAxis && !sameCol ? [axisName] : []), ...measures]
+  const headers = ['Animal', 'Group', ...(hasSex ? ['Sex'] : []), ...(hasTime ? ['Time point'] : []), ...extra, ...measures]
+  const col = (h: string) => headers.indexOf(h)
   const rows = new Map<string, Cell[]>()
+  const sexSure = new Map<string, boolean>()
+  // Labelled animals: ID × time × trial → keys of rows already made (one per sex stated by a sheet).
+  const byId = new Map<string, string[]>()
+  let repeated = 0
+  let conflicts = 0
+  const groupConflicts = new Map<string, Set<string>>()
   for (const r of records) {
-    const time = sameCol ? `${r.time}, ${r.axis}` : r.time
-    const key = [r.animal, r.group, r.sex, time, sameCol ? '' : r.axis].join('\u0000')
+    const axisCol = r.axisKind ? axisColumn(r.axisKind) : null
+    const time = sameCol && axisCol === 'Time point' ? [r.time, r.axis].filter((x) => x !== null).join(', ') : r.time
+    const axisKey = axisCol && !(sameCol && axisCol === 'Time point') ? `${axisCol}=${r.axis}` : ''
+    let key: string
+    if (r.labelled) {
+      // The same ID in a male and a female sheet is two animals; a pooled sheet (no sex in its
+      // title) joins whichever row matches, using its group-title sex only to break a tie.
+      const idKey = [r.animal.toLowerCase(), time, axisKey].join('\u0000')
+      const existing = byId.get(idKey) ?? []
+      const sexKey = (k: string) => rows.get(k)![col('Sex')] ?? null
+      let match: string | undefined
+      if (r.sexFromSheet) match = existing.find((k) => !hasSex || sexKey(k) === r.sex || !sexSure.get(k))
+      else match = existing.length === 1 ? existing[0] : (existing.find((k) => sexKey(k) === r.sex) ?? existing[0])
+      key = match ?? `${idKey}\u0000${existing.length}`
+      if (!match) byId.set(idKey, [...existing, key])
+    } else key = [`pos:${r.animal}`, r.group, r.sex, time, axisKey].join('\u0000')
     let row = rows.get(key)
     if (!row) {
-      row = [r.animal, r.group, ...(hasSex ? [r.sex] : []), ...(hasTime ? [time] : []), ...(hasAxis && !sameCol ? [r.axis] : []), ...measures.map(() => null)]
+      row = new Array<Cell>(headers.length).fill(null)
+      row[0] = r.animal
+      row[1] = r.group
+      if (hasTime) row[col('Time point')] = time
+      if (axisKey) row[col(axisCol!)] = r.axis
       rows.set(key, row)
+    } else if (row[1] !== r.group) {
+      const set = groupConflicts.get(r.animal) ?? new Set<string>([String(row[1])])
+      set.add(r.group)
+      groupConflicts.set(r.animal, set)
     }
-    row[headers.length - measures.length + measures.indexOf(r.measure)] = r.value
+    if (hasSex && r.sex && (!row[col('Sex')] || (r.sexFromSheet && !sexSure.get(key)))) {
+      row[col('Sex')] = r.sex
+      if (r.sexFromSheet) sexSure.set(key, true)
+    }
+    const mi = headers.length - measures.length + measures.indexOf(r.measure)
+    const prev = row[mi]
+    if (prev === null) row[mi] = r.value
+    else {
+      repeated++
+      if (typeof prev === 'number' && Math.abs(prev - r.value) > 1e-9 * Math.max(1, Math.abs(prev))) conflicts++
+    }
+  }
+  if (repeated)
+    notes.push(
+      `${file}: ${repeated} value${repeated === 1 ? '' : 's'} appeared in more than one table (e.g. pooled and per-sex sheets) and ${repeated === 1 ? 'was' : 'were'} counted once, matched by animal ID and timepoint.${conflicts ? ` ${conflicts} of them differed between tables; the first table's value was kept, so check those sheets.` : ''}`,
+    )
+  if (groupConflicts.size) {
+    const ex = [...groupConflicts].slice(0, 3).map(([id, gs]) => `${id}: ${[...gs].join(' / ')}`)
+    notes.push(
+      `${file}: ${groupConflicts.size} animal${groupConflicts.size === 1 ? ' is' : 's are'} listed under different groups in different tables (${ex.join('; ')}${groupConflicts.size > 3 ? '; …' : ''}). The group from the sex-specific table was kept; merge or exclude groups under Setup if they should be analysed together.`,
+    )
   }
   return { file, sheet: '', cells: [headers, ...rows.values()], notes }
 }
@@ -196,20 +296,38 @@ export function readPrismProject(buf: Uint8Array, file: string, opts: ImportOpti
     title: string
     measure: string
     time: string | null
+    sex: string | null
     blocks: Block[]
     rowLabels: (string | null)[]
     xy: boolean
   }
   const sheets: SheetData[] = []
+  const notes: string[] = []
+  const noteSeen = new Set<string>()
   for (const id of sheetIds) {
     const sheet = json(`data/sheets/${id}/sheet.json`)
     const table = sheet?.table as Json | undefined
     if (!sheet || !table) continue
     const csv = zip[`data/tables/${uid(table)}/data.csv`]
     if (!csv) continue
+    const title = text(sheet.title) || `Data ${sheets.length + 1}`
+    // Floating notes on the sheet (e.g. "X and Y were necropsied the day before") are passed on.
+    for (const k of Object.keys(zip).filter((k) => k.startsWith(`data/sheets/${id}/floating_notes/`) && k.endsWith('.json'))) {
+      const t = text(json(k)?.text).replace(/\s+/g, ' ').trim()
+      if (t && !noteSeen.has(t)) {
+        noteSeen.add(t)
+        notes.push(`${file}, note on "${title}": ${t}`)
+      }
+    }
     const reps = Math.max(1, Number(table.replicatesCount) || 1)
     const setIds = Array.isArray(table.dataSets) ? table.dataSets.map(uid) : []
     const titles = setIds.map((s, i) => text(json(`data/sets/${s}.json`)?.title) || `Group ${i + 1}`)
+    // Subcolumn titles (ear tags in per-animal XY sheets, or "Trial 1"…), keyed by data set and replicate.
+    const subTitle = new Map<string, string>()
+    const subSet = typeof table.subcolumnTitlesDataSet === 'string' ? json(`data/sets/${table.subcolumnTitlesDataSet}.json`) : null
+    if (Array.isArray(subSet?.titles))
+      for (const c of subSet.titles as Json[])
+        if (Array.isArray(c.replicates)) for (const r of c.replicates as Json[]) subTitle.set(`${c.column}:${r.replicate}`, text(r.name).trim())
     const grid = Papa.parse<string[]>(strFromU8(csv), { skipEmptyLines: false }).data
     const cell = (s: string | undefined) => {
       const t = (s ?? '').trim()
@@ -217,38 +335,39 @@ export function readPrismProject(buf: Uint8Array, file: string, opts: ImportOpti
     }
     const width = Math.max(0, ...grid.map((r) => r.length))
     const offset = width === titles.length * reps ? 0 : 1
-    let body = grid.filter((r) => r.some((c) => cell(c) !== null))
+    let body = grid.filter((r) => r.slice(offset).some((c) => cell(c) !== null))
     // A header row of column titles, if the CSV has one
     if (body.length && body[0].slice(offset).some((c) => cell(c) !== null && parseNumber(c) === null) && body.slice(1).some((r) => r.slice(offset).some((c) => parseNumber(c ?? '') !== null)))
       body = body.slice(1)
-    const blocks: Block[] = titles.map((title, g) => ({
-      title,
+    const blocks: Block[] = titles.map((t, g) => ({
+      title: t,
       values: body.map((r) => Array.from({ length: reps }, (_, k) => parseNumber(cell(r[offset + g * reps + k]) ?? '') ?? null)),
+      subTitles: subTitle.size ? Array.from({ length: reps }, (_, k) => subTitle.get(`${g}:${k}`) || null) : undefined,
     }))
-    const title = text(sheet.title) || `Data ${sheets.length + 1}`
     const split = splitSheetTitle(title)
     sheets.push({
       title,
-      measure: split.measure,
-      time: split.time,
+      ...split,
       blocks,
       rowLabels: body.map((r) => (offset ? cell(r[0]) : null)),
-      xy: /"[a-z]*(type|format|kind)"\s*:\s*"[^"]*\bxy/i.test(JSON.stringify(table)),
+      xy: table.format === 'xy' || /xy/i.test(String(table['@class'] ?? '')),
     })
   }
   if (!sheets.length) throw new Error(`${file}: no data tables found in this Prism file.`)
 
-  const notes: string[] = []
   // Files with age-binned sheets often also hold per-animal master sheets ("Males",
   // "Females", "all ages") that repeat the same values; those are skipped.
   const timed = sheets.filter((s) => s.time)
   const timedMeasures = new Set(timed.map((s) => normalizeKey(s.measure)))
-  const skipped = timed.length ? sheets.filter((s) => !s.time && (!s.measure || MASTER_SHEET.test(s.measure.replace(/\ball ages\b/i, 'all ages')) || timedMeasures.has(normalizeKey(s.measure)))) : []
+  const skipped = timed.length
+    ? sheets.filter((s) => !s.time && (!s.measure || MASTER_SHEET.test(s.measure) || timedMeasures.has(normalizeKey(s.measure))))
+    : []
   if (skipped.length)
-    notes.push(
-      `${file}: skipped ${skipped.length} sheet${skipped.length === 1 ? '' : 's'} without an age or time window in the title (${skipped.map((s) => `"${s.title}"`).join(', ')}), because they usually repeat the values of the age-binned sheets.`,
+    notes.unshift(
+      `${file}: skipped ${skipped.length} sheet${skipped.length === 1 ? '' : 's'} without an age or time window in the title (${skipped.map((s) => `"${s.title}"`).join(', ')}), because they repeat the values of the age-binned sheets.${skipped.some((s) => s.xy) ? ' (Per-animal XY sheets with exact ages are not used yet.)' : ''}`,
     )
-  const used = sheets.filter((s) => !skipped.includes(s))
+  // Sheets that state one sex come first, so their sex labels and values take precedence over pooled sheets.
+  const used = sheets.filter((s) => !skipped.includes(s)).sort((a, b) => Number(!a.sex) - Number(!b.sex))
   const generic = used.filter((s) => !s.measure || GENERIC_SHEET.test(s.measure))
   const records: RecordRow[] = []
   let anyTrials = false
@@ -256,15 +375,34 @@ export function readPrismProject(buf: Uint8Array, file: string, opts: ImportOpti
     const layout: 'animals' | 'trials' = opts.prismLayout === 'animals' || opts.prismLayout === 'trials' ? opts.prismLayout : s.xy ? 'trials' : 'animals'
     if (layout === 'trials') anyTrials = true
     const measure = !s.measure || GENERIC_SHEET.test(s.measure) ? (generic.length > 1 && s.measure ? `${baseName(file)} (${s.measure})` : baseName(file)) : s.measure
-    records.push(...blockRecords(s.blocks, s.rowLabels, measure, s.time, layout))
+    records.push(...blockRecords(s.blocks, s.rowLabels, { measure, time: s.time, sex: s.sex, layout }))
   }
   if (!records.length) throw new Error(`${file}: the Prism data tables are empty.`)
-  notes.push(
+  // Group titles often carry a hand-typed "n=" that goes stale as animals are added or removed.
+  const stale: string[] = []
+  for (const s of used) {
+    if (s.xy) continue
+    for (const b of s.blocks) {
+      const stated = /\bn\s*=\s*(\d+)/i.exec(b.title)
+      if (!stated) continue
+      const actual = b.values.filter((row) => row.some((v) => v !== null)).length
+      if (actual !== Number(stated[1])) stale.push(`"${s.title}" › ${b.title.trim()} holds ${actual}`)
+    }
+  }
+  if (stale.length)
+    notes.push(
+      `${file}: ${stale.length} group title${stale.length === 1 ? '' : 's'} state an n that differs from the number of animals in the table (${stale.slice(0, 4).join('; ')}${stale.length > 4 ? '; …' : ''}). The app counts the animals actually present; update the titles in Prism if they are used in figures.`,
+    )
+  const reps = records.some((r) => r.axisKind === 'replicate')
+  const trials = records.some((r) => r.axisKind === 'trial')
+  notes.splice(
+    skipped.length ? 1 : 0,
+    0,
     anyTrials
       ? `${file}: read ${used.length} Prism table${used.length === 1 ? '' : 's'} with rows as ${program().rowAxis.toLowerCase()}s and subcolumns as animals. If rows are animals instead, change "Prism tables" on the start screen and add the file again.`
-      : `${file}: read ${used.length} Prism table${used.length === 1 ? '' : 's'} with rows as animals${used.some((s) => s.blocks.some((b) => (b.values[0]?.length ?? 0) > 1)) ? ` and subcolumns as ${runColumn().toLowerCase()}s` : ''}. Rows without an animal ID are matched across tables by their position within each group.`,
+      : `${file}: read ${used.length} Prism table${used.length === 1 ? '' : 's'} with rows as animals${trials ? ' and subcolumns as trials' : ''}.${reps ? ' Values in several subcolumns of the same animal (e.g. two sessions near the target age) are averaged.' : ''}`,
   )
-  return [recordsToSheet(records, file, anyTrials ? 'trials' : 'animals', notes)]
+  return [recordsToSheet(records, file, notes)]
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +487,7 @@ function meltWide(t: ParsedTable): ParsedTable | null {
   const hasDay = cols.some((c) => c.day !== null)
   const hasTrial = cols.some((c) => c.trial !== null)
   const hasBin = cols.some((c) => c.bin !== null)
-  const trialName = runColumn()
+  const trialName = program().id === 'rotarod' ? 'Trial' : 'Replicate'
   const headers = [...keep.map((i) => t.headers[i]), ...(hasDay ? ['Day'] : []), ...(hasTrial ? [trialName] : []), ...(hasBin ? ['Time bin'] : []), ...measures]
   const rows: Cell[][] = []
   for (const r of t.rows) {
@@ -400,14 +538,17 @@ function groupColumns(t: ParsedTable, opts: ImportOptions): ParsedTable | null {
     colsOf.get(current)!.push(i)
   }
   if (blocks.length && blank(blocks[0].title)) return null
-  for (const b of blocks) b.values = rows.map((r) => colsOf.get(b)!.map((i) => toNumber(r[i])))
+  for (const b of blocks) {
+    b.values = rows.map((r) => colsOf.get(b)!.map((i) => toNumber(r[i])))
+    if (subHeader) b.subTitles = colsOf.get(b)!.map((i) => (typeof first[i] === 'string' ? (first[i] as string).trim() : null))
+  }
   const labels = rows.map((r) => (labelCol >= 0 && r[labelCol] !== null ? String(r[labelCol]).trim() : null))
   const title = t.sheet && !GENERIC_SHEET.test(t.sheet.trim()) ? t.sheet : baseName(t.file)
-  const { measure, time } = splitSheetTitle(title)
+  const { measure, time, sex } = splitSheetTitle(title)
   const layout: 'animals' | 'trials' = opts.prismLayout === 'trials' ? 'trials' : 'animals'
-  const records = blockRecords(blocks, labels, measure || baseName(t.file), time, layout)
+  const records = blockRecords(blocks, labels, { measure: measure || baseName(t.file), time, sex, layout })
   if (!records.length) return null
-  const sheet = recordsToSheet(records, t.file, layout, [])
+  const sheet = recordsToSheet(records, t.file, [])
   const [headers, ...body] = sheet.cells
   return { file: t.file, sheet: t.sheet, headerRow: 0, headers: headers.map(String), rows: body }
 }

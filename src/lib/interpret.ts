@@ -110,6 +110,14 @@ export function interpret(tr: TimeResults, cfg: AnalysisConfig, opt: InterpretOp
   return findings.sort((a, b) => b.supporting.length - a.supporting.length || b.score - a.score)
 }
 
+/**
+ * A pattern is reported when at least two of its markers changed, or all of them
+ * when fewer than two were measured (e.g. a rotarod file with latency only).
+ */
+export function isReported(f: DomainFinding): boolean {
+  return f.supporting.length > 0 && f.supporting.length >= Math.min(2, f.available)
+}
+
 export function describeEvidence(e: Evidence): string {
   const arrow = e.comparison.diff > 0 ? '↑' : '↓'
   const pct = Number.isFinite(e.comparison.diffPct) && !e.result.measure.derived?.startsWith('ASYM') ? ` (${e.comparison.diffPct > 0 ? '+' : ''}${e.comparison.diffPct.toFixed(0)}%)` : ''

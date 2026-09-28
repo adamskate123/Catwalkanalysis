@@ -4,7 +4,7 @@
 
 import { program } from '../programs'
 import { aggregate, analyse, DEFAULT_MAX_VARIATION, distinctValues, type AggregateResult, type AnalysisConfig, type Measure, type TimeResults } from './analysis'
-import { changedMeasures, interpret, type InterpretOptions } from './interpret'
+import { changedMeasures, interpret, isReported, type InterpretOptions } from './interpret'
 import type { Dataset } from './parse'
 
 export interface RefineOption {
@@ -84,7 +84,8 @@ export function refinements(ds: Dataset, measures: Measure[], agg: AggregateResu
     const filter = cfg.filters.find((f) => f.col === sexCol)
     const filtered = Boolean(filter && filter.values.length < sexes.length)
     const subs = agg.subjects.filter((s) => s.time === tr?.time)
-    const perGroup = agg.groups.map((g) => new Set(subs.filter((s) => s.group === g).map((s) => s.sex ?? '?')))
+    const present = agg.groups.filter((g) => subs.some((s) => s.group === g))
+    const perGroup = present.map((g) => new Set(subs.filter((s) => s.group === g).map((s) => s.sex ?? '?')))
     const unbalanced = sexes.length > 1 && perGroup.some((set) => sexes.some((x) => !set.has(x)))
     if (filtered || unbalanced) {
       const withoutSex = (c: AnalysisConfig) => c.filters.filter((f) => f.col !== sexCol)
@@ -93,7 +94,7 @@ export function refinements(ds: Dataset, measures: Measure[], agg: AggregateResu
         title: 'Analyse one sex only',
         why: filtered
           ? `The analysis is restricted to ${sexCol} = ${filter!.values.join(' or ')}.`
-          : `Sex is not balanced across groups (${agg.groups.map((g, i) => `${g}: ${[...perGroup[i]].join('+') || '—'}`).join('; ')}). Sex affects body size, print area and speed.`,
+          : `Sex is not balanced across groups (${present.map((g, i) => `${g}: ${[...perGroup[i]].join('+')}`).join('; ')}). ${program().features.paws ? 'Sex affects body size, print area and speed.' : 'Sex affects body weight and performance.'}`,
         options: sexes.map((sx) => ({
           label: `${sx} only`,
           apply: (c) => ({ ...c, filters: [...withoutSex(c), { col: sexCol, values: [sx] }] }),
@@ -112,7 +113,7 @@ export function refinements(ds: Dataset, measures: Measure[], agg: AggregateResu
   // 4. Too few runs per animal
   const fewRuns = agg.subjects.filter((s) => s.nRuns < MIN_RECOMMENDED_RUNS).length
   const runs = program().runsNoun
-  const repeated = program().features.speed || Boolean(program().trialDerived)
+  const repeated = program().features.speed || agg.trials.length > 0
   if (repeated && cfg.subjectCol && (cfg.minRuns >= MIN_RECOMMENDED_RUNS || fewRuns > 0)) {
     const active = cfg.minRuns >= MIN_RECOMMENDED_RUNS
     out.push({
@@ -162,6 +163,6 @@ export function outcome(ds: Dataset, measures: Measure[], cfg: AnalysisConfig, o
   return {
     animals: agg.subjects.filter((s) => s.time === (tr?.time ?? '')).length,
     changed: changedMeasures(tr, cfg, opt).size,
-    patterns: tr ? interpret(tr, cfg, opt).filter((f) => f.supporting.length >= 2).map((f) => f.domain.title) : [],
+    patterns: tr ? interpret(tr, cfg, opt).filter(isReported).map((f) => f.domain.title) : [],
   }
 }

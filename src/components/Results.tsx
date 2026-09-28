@@ -42,8 +42,21 @@ type Tab = 'summary' | 'story' | 'fingerprint' | 'explore' | 'trials' | 'time' |
 export function Results(props: Props) {
   const { ds, measures, cfg, setCfg, opt, setOpt, agg, results, theme, onReset, onLearn, experiment, saveState } = props
   const [tab, setTab] = useState<Tab>('summary')
-  const [timePick, setTime] = useState<string>(results[results.length - 1]?.time ?? '')
-  const time = results.some((r) => r.time === timePick) ? timePick : (results[results.length - 1]?.time ?? '')
+  // Open on the timepoint with the most animals (the last one on a tie): late timepoints often have very few.
+  const busiest = useMemo(() => {
+    let best = results[results.length - 1]?.time ?? ''
+    let n = -1
+    for (const r of results) {
+      const k = agg.subjects.filter((s) => s.time === r.time).length
+      if (k >= n) {
+        n = k
+        best = r.time
+      }
+    }
+    return best
+  }, [results, agg])
+  const [timePick, setTime] = useState<string | null>(null)
+  const time = timePick !== null && results.some((r) => r.time === timePick) ? timePick : busiest
   const [measureKey, setMeasureKey] = useState<string | null>(null)
 
   const colorOf = useMemo(() => {

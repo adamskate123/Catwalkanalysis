@@ -171,7 +171,6 @@ input {
   border: 1px solid transparent;
   border-radius: 10px;
   padding: 4px 8px 4px 4px;
-  margin-left: -4px;
   min-height: 40px;
   cursor: pointer;
 }
@@ -1134,19 +1133,22 @@ footer.app-footer {
 
 /* Program switcher on narrow screens: let the name shrink instead of pushing the nav off-screen */
 .brand {
-  min-width: 0;
-  flex: 0 1 auto;
-}
-.brand-btn {
-  min-width: 0;
-  max-width: 100%;
-}
-.brand-btn > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: none;
 }
 @media (max-width: 420px) {
+  .brand {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  .brand-btn {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .brand-btn > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .topbar-inner {
     gap: 8px;
   }
