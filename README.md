@@ -67,6 +67,10 @@ Each analysis is saved as an **experiment** on your device and can grow over tim
 
 After classifying runs, export the **run statistics** (one row per run) to Excel or text. Include your independent variables (genotype, treatment, timepoint) and the animal/trial identifier. A demo file with the expected layout can be downloaded from the app's start screen. The **Try with demo data** button loads simulated data from a hypothetical gene-therapy study (WT, Model + Vehicle, Model + AAV at 4, 8 and 12 weeks).
 
+## References
+
+All sources behind the tutorials, phenotype patterns, statistics and file formats are listed in [REFERENCES.md](REFERENCES.md) and in the app under *References & sources* (footer). The list lives in `src/lib/references.ts`; after editing it, run `node scripts/references-md.mjs` to regenerate REFERENCES.md (a unit test checks they match).
+
 ## Development
 
 ```bash

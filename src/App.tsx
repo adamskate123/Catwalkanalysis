@@ -6,6 +6,7 @@ import { ProgramMenu } from './components/ProgramMenu'
 import { LearnProgram } from './components/LearnProgram'
 import { PROGRAMS, program, setProgram, type ProgramId } from './programs'
 import { Changelog } from './components/Changelog'
+import { Sources } from './components/Sources'
 import { APP_VERSION } from './version'
 import { mergeTables } from './lib/parse'
 import { aggregate, analyse, buildMeasures, type AnalysisConfig } from './lib/analysis'
@@ -15,11 +16,12 @@ import { deleteExperiment, getExperiment, listExperiments, requestPersistence, s
 import type { LoadedFile } from './lib/readFiles'
 import { useChartTheme } from './lib/theme'
 
-type View = 'analyze' | 'learn' | 'changes'
+type View = 'analyze' | 'learn' | 'changes' | 'sources'
 
 function initialView(): View {
   if (location.hash.startsWith('#learn')) return 'learn'
   if (location.hash === '#changes') return 'changes'
+  if (location.hash === '#sources') return 'sources'
   return 'analyze'
 }
 
@@ -72,7 +74,7 @@ export default function App() {
 
   const go = (v: View, anchor?: string) => {
     setView(v)
-    const hash = v === 'learn' ? `#learn${anchor ? '-' + anchor : ''}` : v === 'changes' ? '#changes' : ''
+    const hash = v === 'learn' ? `#learn${anchor ? '-' + anchor : ''}` : v === 'changes' || v === 'sources' ? `#${v}` : ''
     history.replaceState(null, '', hash || location.pathname)
     if (anchor) setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth' }), 50)
     else window.scrollTo({ top: 0 })
@@ -255,6 +257,8 @@ export default function App() {
       <main>
         {view === 'changes' ? (
           <Changelog />
+        ) : view === 'sources' ? (
+          <Sources onBack={() => go('analyze')} />
         ) : view === 'learn' ? (
           programId === 'catwalk' ? <Learn onAnalyze={() => go('analyze')} /> : <LearnProgram id={programId} onAnalyze={() => go('analyze')} />
         ) : ds && cfg && agg && results ? (
@@ -298,6 +302,10 @@ export default function App() {
       <footer className="app-footer">
         <button className="btn ghost sm" style={{ padding: 0, minHeight: 0 }} onClick={() => go('changes')}>
           Behavior Lab v{APP_VERSION} · What's new
+        </button>
+        {' · '}
+        <button className="btn ghost sm" style={{ padding: 0, minHeight: 0 }} onClick={() => go('sources')}>
+          References &amp; sources
         </button>
         <br />
         All processing happens on this device; your files are never uploaded. For research use; automated interpretations are not diagnoses.

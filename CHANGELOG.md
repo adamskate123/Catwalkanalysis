@@ -27,6 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   - **Layout setting:** "Prism tables" on the start screen and in Add data. Choose whether rows are animals or trials/time bins.
 - Rotarod and Open Field tutorials under Learn, with references verified in PubMed: Deacon 2013; Rustay, Wahlsten & Crabbe 2003 (×2); Seibenhener & Wooten 2015; Prut & Belzung 2003.
 - Demo data for each program.
+- **References & sources** page (footer link) and `REFERENCES.md`, both listing every source the app is built on. That includes the CatWalk, rotarod and open field literature, the statistical methods (Welch, Mann–Whitney, Kruskal–Wallis, Holm, Benjamini–Hochberg, Hedges, Numerical Recipes, SciPy) and the instrument and Prism file formats, each with what it was used for. Tutorials cite from the same list.
 
 ### Changed
 

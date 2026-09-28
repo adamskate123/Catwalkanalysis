@@ -1162,3 +1162,9 @@ footer.app-footer {
 .topbar-inner .nav {
   flex: none;
 }
+
+.learn-single {
+  display: grid;
+  gap: 16px;
+  max-width: 900px;
+}

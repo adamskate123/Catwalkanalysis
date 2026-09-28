@@ -1,24 +1,9 @@
 import { useState } from 'react'
 import { CATEGORY_LABELS, CATEGORY_ORDER, PARAMS } from '../lib/catalog'
 import { CATWALK_DOMAINS as DOMAINS } from '../programs/catwalk-domains'
+import { CATWALK_REFS as REFS } from '../lib/references'
 import { FootprintDiagram, IntensityDiagram, StepCycleDiagram, StepPatternDiagram, SupportDiagram, WalkwayDiagram } from './diagrams'
 
-// References verified in PubMed.
-const REFS = [
-  { id: 'hamers2006', text: 'Hamers FPT, Koopmans GC, Joosten EAJ. CatWalk-assisted gait analysis in the assessment of spinal cord injury. J Neurotrauma. 2006;23(3-4):537-48.', doi: '10.1089/neu.2006.23.537' },
-  { id: 'batka2014', text: 'Batka RJ, Brown TJ, Mcmillan KP, et al. The need for speed in rodent locomotion analyses. Anat Rec. 2014;297(10):1839-64.', doi: '10.1002/ar.22955' },
-  { id: 'vrinten2003', text: "Vrinten DH, Hamers FFT. 'CatWalk' automated quantitative gait analysis as a novel method to assess mechanical allodynia in the rat; a comparison with von Frey testing. Pain. 2003;102(1-2):203-9.", doi: '10.1016/s0304-3959(02)00382-2' },
-  { id: 'vogelaar2004', text: 'Vogelaar CF, Vrinten DH, Hoekman MFM, et al. Sciatic nerve regeneration in mice and rats: recovery of sensory innervation is followed by a slowly retreating neuropathic pain-like syndrome. Brain Res. 2004;1027(1-2):67-72.', doi: '10.1016/j.brainres.2004.08.036' },
-  { id: 'vandeputte2010', text: 'Vandeputte C, Taymans JM, Casteels C, et al. Automated quantitative gait analysis in animal models of movement disorders. BMC Neurosci. 2010;11:92.', doi: '10.1186/1471-2202-11-92' },
-  { id: 'hendriks2006', text: 'Hendriks WTJ, Eggers R, Ruitenberg MJ, et al. Profound differences in spontaneous long-term functional recovery after defined spinal tract lesions in the rat. J Neurotrauma. 2006;23(1):18-35.', doi: '10.1089/neu.2006.23.18' },
-  { id: 'gensel2006', text: 'Gensel JC, Tovar CA, Hamers FPT, et al. Behavioral and histological characterization of unilateral cervical spinal cord contusion injury in rats. J Neurotrauma. 2006;23(1):36-54.', doi: '10.1089/neu.2006.23.36' },
-  { id: 'caballero2017', text: 'Caballero-Garrido E, Pena-Philippides JC, Galochkina Z, et al. Characterization of long-term gait deficits in mouse dMCAO, using the CatWalk system. Behav Brain Res. 2017;331:282-96.', doi: '10.1016/j.bbr.2017.05.042' },
-  { id: 'vergouts2015', text: 'Vergouts M, Marinangeli C, Ingelbrecht C, et al. Early ALS-type gait abnormalities in AMP-dependent protein kinase-deficient mice suggest a role for this metabolic sensor in early stages of the disease. Metab Brain Dis. 2015;30(6):1369-77.', doi: '10.1007/s11011-015-9706-9' },
-  { id: 'meszaros2021', text: 'Mészáros L, Riemenschneider MJ, Gassner H, et al. Human alpha-synuclein overexpressing MBP29 mice mimic functional and structural hallmarks of the cerebellar subtype of multiple system atrophy. Acta Neuropathol Commun. 2021;9(1):68.', doi: '10.1186/s40478-021-01166-x' },
-  { id: 'kopecky2012', text: 'Kopecky B, Decook R, Fritzsch B. Mutational ataxia resulting from abnormal vestibular acquisition and processing is partially compensated for. Behav Neurosci. 2012;126(2):301-13.', doi: '10.1037/a0026896' },
-  { id: 'zimmermann2016', text: "Zimmermann T, Remmers F, Lutz B, Leschik J. ESC-derived BDNF-overexpressing neural progenitors differentially promote recovery in Huntington's disease models by enhanced striatal differentiation. Stem Cell Reports. 2016;7(4):693-706.", doi: '10.1016/j.stemcr.2016.08.018' },
-  { id: 'salazar2010', text: 'Salazar DL, Uchida N, Hamers FPT, et al. Human neural stem cells differentiate and promote locomotor recovery in an early chronic spinal cord injury NOD-scid mouse model. PLoS One. 2010;5(8):e12272.', doi: '10.1371/journal.pone.0012272' },
-]
 
 function Cite({ ids }: { ids: string[] }) {
   return (
@@ -447,6 +432,9 @@ export function Learn({ onAnalyze }: { onAnalyze: () => void }) {
               </li>
             ))}
           </ol>
+          <p className="small">
+            <a href="#sources">All references and sources the app is built on (statistics, file formats, other programs) →</a>
+          </p>
           <p className="small muted">
             Parameter definitions follow the CatWalk XT reference manual's terminology. CatWalk is a trademark of Noldus Information Technology; this app is an
             independent tool and is not affiliated with Noldus.

@@ -1,14 +1,11 @@
 import { useState, type ReactElement, type ReactNode } from 'react'
 import { getProgram, type ProgramId } from '../programs'
 import { ArenaDiagram, RotarodDiagram } from './diagrams'
+import { OPENFIELD_REFS, ROTAROD_REFS, type Reference } from '../lib/references'
 
-// Tutorials for the rotarod and open field programs. References verified in PubMed.
+// Tutorials for the rotarod and open field programs. References live in lib/references.ts.
 
-interface Ref {
-  id: string
-  text: string
-  doi: string
-}
+type Ref = Reference
 
 interface Content {
   title: string
@@ -19,28 +16,6 @@ interface Content {
   protocol: ReactNode
   confounds: ReactNode
   refs: Ref[]
-}
-
-const DEACON = { id: 'deacon2013', text: 'Deacon RMJ. Measuring motor coordination in mice. J Vis Exp. 2013;(75):e2609.', doi: '10.3791/2609' }
-const RUSTAY_BBR = {
-  id: 'rustay2003a',
-  text: 'Rustay NR, Wahlsten D, Crabbe JC. Influence of task parameters on rotarod performance and sensitivity to ethanol in mice. Behav Brain Res. 2003;141(2):237-49.',
-  doi: '10.1016/s0166-4328(02)00376-5',
-}
-const RUSTAY_PNAS = {
-  id: 'rustay2003b',
-  text: 'Rustay NR, Wahlsten D, Crabbe JC. Assessment of genetic susceptibility to ethanol intoxication in mice. Proc Natl Acad Sci U S A. 2003;100(5):2917-22.',
-  doi: '10.1073/pnas.0437273100',
-}
-const SEIBENHENER = {
-  id: 'seibenhener2015',
-  text: 'Seibenhener ML, Wooten MC. Use of the Open Field Maze to measure locomotor and anxiety-like behavior in mice. J Vis Exp. 2015;(96):e52434.',
-  doi: '10.3791/52434',
-}
-const PRUT = {
-  id: 'prut2003',
-  text: 'Prut L, Belzung C. The open field as a paradigm to measure the effects of drugs on anxiety-like behaviors: a review. Eur J Pharmacol. 2003;463(1-3):3-33.',
-  doi: '10.1016/s0014-2999(03)01272-x',
 }
 
 function Cite({ refs, ids }: { refs: Ref[]; ids: string[] }) {
@@ -58,9 +33,6 @@ function Cite({ refs, ids }: { refs: Ref[]; ids: string[] }) {
     </sup>
   )
 }
-
-const ROTAROD_REFS = [DEACON, RUSTAY_BBR, RUSTAY_PNAS]
-const OPENFIELD_REFS = [SEIBENHENER, PRUT]
 
 const CONTENT: Record<'rotarod' | 'openfield', Content> = {
   rotarod: {
@@ -308,6 +280,9 @@ export function LearnProgram({ id, onAnalyze }: { id: Exclude<ProgramId, 'catwal
               </li>
             ))}
           </ol>
+          <p className="small">
+            <a href="#sources">All references and sources the app is built on (statistics, file formats, other programs) →</a>
+          </p>
           <p className="small muted">
             {prog.instrument} is a trademark of its manufacturer; this app is an independent tool and is not affiliated with it.
           </p>
