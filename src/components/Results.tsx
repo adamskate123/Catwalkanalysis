@@ -60,7 +60,7 @@ export function Results(props: Props) {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const tabProps: TabProps = { ds, measures, cfg, agg, results, theme, opt, time, colorOf, openMeasure, onLearn }
+  const tabProps: TabProps = { ds, measures, cfg, setCfg, agg, results, theme, opt, time, colorOf, openMeasure, onLearn }
   const hasTime = results.length > 1
   const tabs: [Tab, string][] = [
     ['summary', 'Summary'],

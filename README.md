@@ -1,6 +1,6 @@
 # Gait Lab · CatWalk Analyzer
 
-**Version 1.4.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 1.5.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
 A web app that turns **CatWalk XT** (Noldus) gait-analysis exports into structured graphs, statistics and a written phenotype summary, with a built-in tutorial on how CatWalk works and how its parameters change in models of neurological disease.
 
@@ -18,7 +18,7 @@ It runs in any modern browser on **phones, tablets and desktops**, and can be in
 - Optional **speed adjustment** (pooled within-animal regression on run speed), plus a speed-check view, because most CatWalk parameters depend on walking speed.
 - Views:
   - **Summary**: a written narrative, phenotype-pattern scoring (global slowing, ataxia, interlimb coordination, hind- or fore-limb deficit, lateralised deficit, hyperkinesia), largest changes and treatment rescue.
-  - **Story**: figures grouped by phenotype pattern, with what each pattern may mean, suggested confirmatory tests and a per-story Prism export.
+  - **Story**: figures grouped by phenotype pattern, with what each pattern may mean, suggested confirmatory tests and a per-story Prism export. Its "Before drawing conclusions" section has switches (speed-variation filter, speed adjustment, one sex only, minimum runs) with live previews of how each changes the result.
   - **Gait fingerprint**: an effect-size heatmap for all paws and parameters.
   - **Parameters**: per-paw dot plots with individual animals, mean ± SEM, stats tables and time courses.
   - **Over time**: effect-size progression across timepoints.
