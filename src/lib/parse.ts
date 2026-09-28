@@ -336,10 +336,11 @@ export function mergeTables(tables: ParsedTable[]): Dataset {
   }
 
   // Updated exports usually repeat earlier rows. A later row with the same
-  // experiment/animal/trial/timepoint/session/run replaces the earlier one.
+  // experiment/animal/sex/trial/timepoint/session/run replaces the earlier one
+  // (sex is part of the identity because ear tags can repeat across sexes).
   const idCols = headers
     .map((h, i) => ({ h, i, role: metaRole(h) }))
-    .filter(({ h, role }) => /^experiment$/i.test(h.trim()) || role === 'subject' || role === 'trial' || role === 'run' || (role === 'time' && !/description/i.test(h)))
+    .filter(({ h, role }) => /^experiment$/i.test(h.trim()) || role === 'subject' || role === 'trial' || role === 'run' || role === 'sex' || (role === 'time' && !/description/i.test(h)))
   let replaced = 0
   if (idCols.some((c) => c.role === 'subject' || c.role === 'trial')) {
     const seen = new Map<string, number>()

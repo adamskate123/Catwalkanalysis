@@ -65,7 +65,7 @@ export function TimeTab({ results, theme, cfg, openMeasure }: TabProps) {
               </select>
             )}
             <select value={scope} onChange={(e) => setScope(e.target.value as 'summary' | 'all')} style={{ width: 'auto' }} aria-label="Parameters shown">
-              <option value="summary">Whole-body + front/hind means</option>
+              <option value="summary">{program().features.paws ? 'Whole-body + front/hind means' : 'Key parameters'}</option>
               <option value="all">All parameters</option>
             </select>
           </span>

@@ -1,6 +1,6 @@
 # Behavior Lab · Gait, Rotarod, Open Field
 
-**Version 2.0.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 2.1.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
 A web app that turns rodent behavioural data into structured graphs, statistics and a written phenotype summary, with a built-in tutorial for each test. It contains three programs; switch between them by clicking the name and icon at the top left:
 
@@ -25,8 +25,11 @@ Besides instrument exports, every program reads:
 - **Prism 10 projects (`.prism`)**:
   - The data-table title is the measure. An age or time window in it ("Latency 51-100 days", "P30") becomes the timepoint.
   - Data-set titles are groups; sex and "n=" are read from them ("A477T Affected Males n=19" → group *A477T Affected*, sex *M*).
-  - Replicate subcolumns become trials.
+  - A sex in the sheet title ("Rotarod - Males 50 days") sets the sex of every animal in it.
+  - Row titles are animal IDs. Animals are matched across tables by ID, so pooled and per-sex copies are counted once.
+  - Replicate subcolumns are averaged as repeated values of the same animal, unless titled "Trial 1", "Trial 2"…, which are read as trials.
   - Tables whose titles lack a window but repeat the binned data ("Males", "Females", "all ages") are skipped.
+  - On loading, the app lists stale "n=" in group titles, animals filed under different groups, and Prism's floating notes.
 - **Prism-style spreadsheets**: one column (or block of subcolumns) per group, one row per animal; the sheet name is the measure.
 - **Long tables**: animal, group, …, a *Measure* column and a *Value* column.
 - **Wide tables**: one column per trial, day or time bin (`Trial 1`, `Day 2 Trial 3`, `0-5 min`).
