@@ -269,7 +269,7 @@ function Refinements(props: TabProps & { refs: Refinement[] }) {
     [refs, ds, measures, cfg, opt, time],
   )
   // Choices between alternatives (e.g. which sex) are never applied in bulk.
-  const actionable = refs.filter((r) => r.options.length === 1)
+  const actionable = refs.filter((r) => r.options.length === 1 && !r.manualOnly)
   const anyActive = refs.some((r) => r.active)
 
   return (

@@ -3,6 +3,20 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-09-28
+
+### Added
+
+- **Combine groups** (Setup → Groups, all programs). Tick two or more groups, name the combined group, and they are analysed as one, for example several wild-type cohorts ("Jax WT", "EIF Jax WT", "New Jax WT").
+  - A combined group shows its members and has a **Split** button to undo.
+  - The original labels stay in the data, and the combination is saved with the experiment.
+  - Data added later that belong to a combined group join it automatically.
+  - The panel opens automatically when more than one group looks like a control.
+- **Story switch: "Combine control cohorts into …"**. It appears when several groups look like controls, with the usual live preview.
+  - It shows each cohort's mean and n.
+  - It warns when a cohort differs significantly from the main control, since the cohorts may not be interchangeable.
+  - It is left out of "Apply all switches" because it is a study-design choice.
+
 ## [2.1.0] - 2026-09-28
 
 Tested against a real Prism 10.6 rotarod project with per-sex and pooled age-binned sheets.

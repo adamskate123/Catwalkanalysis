@@ -1,7 +1,7 @@
 // Saved experiments: a named collection of loaded files plus analysis settings,
 // which can grow over time as new exports are added.
 
-import { distinctValues, naturalCompare, type AnalysisConfig, autoConfig } from './analysis'
+import { distinctValues, groupList, naturalCompare, type AnalysisConfig, autoConfig } from './analysis'
 import type { InterpretOptions } from './interpret'
 import { isKeyTable, type Dataset, type ParsedTable } from './parse'
 import type { ProgramId } from '../programs'
@@ -108,7 +108,8 @@ export function reconcileConfig(old: AnalysisConfig | undefined, ds: Dataset): A
     compliantCol: keep('compliantCol'),
     filters: old.filters.filter((f) => ds.headers.includes(f.col)),
   }
-  const groups = distinctValues(ds, cfg.groupCol)
+  if (cfg.groupCol !== old.groupCol) cfg.groupMerge = undefined
+  const groups = groupList(ds, cfg)
   if (cfg.groupCol !== old.groupCol) {
     Object.assign(cfg, { groupOrder: fresh.groupOrder, controlGroup: fresh.controlGroup, diseaseGroup: fresh.diseaseGroup, excludedGroups: [] })
   } else {

@@ -149,11 +149,77 @@ export interface AnalysisConfig {
   maxVariation: number | null
   /** Keep only rows whose value in `col` is one of `values`. */
   filters: { col: string; values: string[] }[]
+  /** Groups analysed together: original group name → combined group name. */
+  groupMerge?: Record<string, string>
 }
 
 export const DEFAULT_MAX_VARIATION = 60
 
 const NO_GROUP = 'All animals'
+
+/** The group an original group value is analysed in (after any combining). */
+export function groupOf(cfg: Pick<AnalysisConfig, 'groupMerge'>, raw: string): string {
+  return (raw && cfg.groupMerge?.[raw]) || raw
+}
+
+/** Groups as analysed: original values of the group column with combined groups folded together. */
+export function groupList(ds: Dataset, cfg: Pick<AnalysisConfig, 'groupCol' | 'groupMerge'>): string[] {
+  return [...new Set(distinctValues(ds, cfg.groupCol).map((g) => groupOf(cfg, g)))].sort(naturalCompare)
+}
+
+/** The original groups that make up an analysed group. */
+export function groupMembers(ds: Dataset, cfg: Pick<AnalysisConfig, 'groupCol' | 'groupMerge'>, group: string): string[] {
+  return distinctValues(ds, cfg.groupCol).filter((g) => groupOf(cfg, g) === group)
+}
+
+/**
+ * Analyses several groups as one, named `name` (e.g. three wild-type cohorts as
+ * "Jax WT"). The combined group takes the first one's place in the order and
+ * inherits its control/disease role.
+ */
+export function combineGroups(ds: Dataset, cfg: AnalysisConfig, groups: string[], name: string): AnalysisConfig {
+  const target = name.trim()
+  if (!target || groups.length === 0) return cfg
+  const chosen = new Set(groups)
+  const merge = { ...(cfg.groupMerge ?? {}) }
+  for (const raw of distinctValues(ds, cfg.groupCol)) if (chosen.has(groupOf(cfg, raw))) merge[raw] = target
+  for (const k of Object.keys(merge)) if (merge[k] === k) delete merge[k]
+  const firstAt = cfg.groupOrder.findIndex((g) => chosen.has(g))
+  const order = cfg.groupOrder.filter((g) => !chosen.has(g) && g !== target)
+  order.splice(firstAt < 0 ? order.length : Math.min(firstAt, order.length), 0, target)
+  const role = (g: string | null) => (g && chosen.has(g) ? target : g)
+  const control = role(cfg.controlGroup)
+  const disease = role(cfg.diseaseGroup)
+  return {
+    ...cfg,
+    groupMerge: merge,
+    groupOrder: order,
+    controlGroup: control,
+    diseaseGroup: disease === control ? null : disease,
+    excludedGroups: cfg.excludedGroups.filter((g) => !chosen.has(g)),
+  }
+}
+
+/** Undoes combineGroups for one analysed group, restoring its original groups. */
+export function splitGroup(ds: Dataset, cfg: AnalysisConfig, group: string): AnalysisConfig {
+  const members = groupMembers(ds, cfg, group)
+  if (members.length < 2 && !cfg.groupMerge?.[group]) return cfg
+  const merge = { ...(cfg.groupMerge ?? {}) }
+  for (const raw of members) delete merge[raw]
+  const at = cfg.groupOrder.indexOf(group)
+  const order = cfg.groupOrder.filter((g) => g !== group)
+  // Keep an original group with the combined name (e.g. "Jax WT") in the combined group's place.
+  const restored = [...members].sort((a, b) => Number(a !== group) - Number(b !== group) || a.length - b.length)
+  order.splice(at < 0 ? order.length : at, 0, ...restored)
+  const heir = restored[0]
+  return {
+    ...cfg,
+    groupMerge: merge,
+    groupOrder: order,
+    controlGroup: cfg.controlGroup === group ? heir : cfg.controlGroup,
+    diseaseGroup: cfg.diseaseGroup === group ? heir : cfg.diseaseGroup,
+  }
+}
 
 function colIndex(ds: Dataset, name: string | null): number {
   return name ? ds.headers.indexOf(name) : -1
@@ -185,6 +251,9 @@ export const isTrialColumn = (c: { meta: string | null; name: string }) => c.met
 
 const CONTROL_HINT = /^(wt|wild[\s-]?type|control|ctrl|sham|naive|vehicle|veh|healthy|\+\/\+|het)$/i
 const CONTROL_HINT_LOOSE = /(wt|wild[\s-]?type|control|ctrl|sham|naive)/i
+
+/** Group names that look like a control cohort ("Jax WT", "EIF Jax WT", "Sham"). */
+export const isControlLike = (g: string) => CONTROL_HINT_LOOSE.test(g)
 const DISEASE_HINT = /(vehicle|veh|pbs|saline|untreated|ko|-\/-|mutant|model|lesion|disease)/i
 
 export function groupDefaults(groups: string[]): { controlGroup: string | null; diseaseGroup: string | null; groupOrder: string[] } {
@@ -349,7 +418,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       highVar++
       return
     }
-    const group = gi >= 0 ? cellText(r[gi]) : NO_GROUP
+    const group = gi >= 0 ? groupOf(cfg, cellText(r[gi])) : NO_GROUP
     if (!group || cfg.excludedGroups.includes(group)) return
     const time = ti >= 0 ? cellText(r[ti]) : ''
     if (ti >= 0 && !time) return

@@ -1,4 +1,5 @@
-import { DEFAULT_MAX_VARIATION, distinctValues, groupDefaults, type AnalysisConfig, type Measure } from '../lib/analysis'
+import { DEFAULT_MAX_VARIATION, combineGroups, isControlLike, distinctValues, groupDefaults, groupMembers, splitGroup, type AnalysisConfig, type Measure } from '../lib/analysis'
+import { CombineGroups } from './CombineGroups'
 import { program } from '../programs'
 import type { InterpretOptions } from '../lib/interpret'
 import type { Dataset } from '../lib/parse'
@@ -28,6 +29,7 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
   const update = (patch: Partial<AnalysisConfig>) => setCfg({ ...cfg, ...patch })
   const hasSpeed = measures.some((m) => m.def.id === 'speed')
   const groups = cfg.groupOrder
+  const members = (g: string) => groupMembers(ds, cfg, g)
 
   const colSelect = (label: string, hint: string, value: string | null, onChange: (v: string | null) => void, options = textCols) => (
     <label className="field">
@@ -61,7 +63,7 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
           {colSelect('Animal ID', `${Runs} with the same ID (and timepoint) are averaged into one value per animal.`, cfg.subjectCol, (v) => update({ subjectCol: v }), allCols)}
           {colSelect('Group', 'Genotype, treatment or cohort to compare.', cfg.groupCol, (v) => {
             const d = groupDefaults(distinctValues(ds, v))
-            update({ groupCol: v, ...d, excludedGroups: [] })
+            update({ groupCol: v, ...d, excludedGroups: [], groupMerge: undefined })
           })}
           {colSelect('Timepoint', 'Optional. Each timepoint is analysed separately and plotted over time.', cfg.timeCol, (v) =>
             update({ timeCol: v, timeOrder: distinctValues(ds, v) }),
@@ -229,9 +231,15 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
                     {g}
                     {g === cfg.controlGroup && <span className="badge" style={{ marginLeft: 6 }}>control</span>}
                     {g === cfg.diseaseGroup && <span className="badge" style={{ marginLeft: 6 }}>disease</span>}
+                    {members(g).length > 1 && <span className="hint" style={{ display: 'block' }}>Combined: {members(g).join(' + ')}</span>}
                   </span>
                 </label>
                 <span className="row" style={{ gap: 4 }}>
+                  {members(g).length > 1 && (
+                    <button className="btn sm" onClick={() => setCfg(splitGroup(ds, cfg, g))} aria-label={`Split ${g} into its original groups`}>
+                      Split
+                    </button>
+                  )}
                   <button className="btn sm" onClick={() => update({ groupOrder: move(groups, i, -1) })} disabled={i === 0} aria-label={`Move ${g} up`}>
                     ↑
                   </button>
@@ -242,6 +250,7 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
               </li>
             ))}
           </ul>
+          {groups.length > 2 && <CombineGroups groups={groups} control={cfg.controlGroup} defaultOpen={groups.filter(isControlLike).length > 1} onCombine={(gs, name) => setCfg(combineGroups(ds, cfg, gs, name))} />}
           {cfg.timeCol && cfg.timeOrder.length > 1 && (
             <>
               <h3 style={{ marginTop: 16 }}>Timepoint order</h3>

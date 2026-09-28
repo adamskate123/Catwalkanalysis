@@ -3,7 +3,7 @@
 // dataset, and how to change the analysis settings to address it.
 
 import { program } from '../programs'
-import { aggregate, analyse, DEFAULT_MAX_VARIATION, distinctValues, type AggregateResult, type AnalysisConfig, type Measure, type TimeResults } from './analysis'
+import { aggregate, analyse, combineGroups, DEFAULT_MAX_VARIATION, distinctValues, formatNum, formatP, groupMembers, isControlLike, splitGroup, type AggregateResult, type AnalysisConfig, type Measure, type TimeResults } from './analysis'
 import { changedMeasures, interpret, isReported, type InterpretOptions } from './interpret'
 import type { Dataset } from './parse'
 
@@ -26,6 +26,8 @@ export interface Refinement {
   active: boolean
   /** Short description of the refinement when it is on, e.g. "Sex = M only". */
   summary: string
+  /** Left out of "Apply all switches" (a study-design choice rather than a routine clean-up). */
+  manualOnly?: boolean
 }
 
 export const MIN_RECOMMENDED_RUNS = 3
@@ -129,7 +131,46 @@ export function refinements(ds: Dataset, measures: Measure[], agg: AggregateResu
     })
   }
 
-  // 5. Age differences: can only be noted (or handled with a filter on a key column)
+  // 5. Several control cohorts (e.g. "Jax WT", "EIF Jax WT", "New Jax WT") that could be analysed as one
+  const control = cfg.controlGroup
+  if (control && cfg.groupCol) {
+    const merged = groupMembers(ds, cfg, control)
+    const cohorts = agg.groups.filter((g) => g !== control && isControlLike(g) && !cfg.excludedGroups.includes(g))
+    const active = merged.length > 1
+    if (active || cohorts.length > 0) {
+      // Compare each extra cohort with the control on the first parameter at this timepoint.
+      const r = tr?.results[0]
+      const line = (g: string) => {
+        const d = r?.groups[g]
+        return d && d.n ? `${g} ${formatNum(d.mean)}${r!.measure.def.unit ? ' ' + r!.measure.def.unit : ''} (n = ${d.n})` : `${g} (no animals here)`
+      }
+      const differ = r ? cohorts.filter((g) => r.comparisons.some((c) => c.group === g && c.reference === control && c.pAdj < 0.05)) : []
+      out.push({
+        id: 'controls',
+        title: active ? `Control cohorts combined as ${control}` : `Combine control cohorts into ${control}`,
+        why: active
+          ? `${control} is analysed as one group made of ${merged.join(' + ')}. Split it under Setup → Groups, or switch this off, to compare the cohorts separately.`
+          : `Besides ${control}, ${cohorts.length === 1 ? 'this group also looks' : 'these groups also look'} like controls: ${cohorts.join(', ')}. Combining them gives a larger control group${r ? ` (${r.measure.label}: ${[control, ...cohorts].map(line).join('; ')})` : ''}. ${
+              differ.length
+                ? `But ${differ.join(' and ')} ${differ.length === 1 ? 'differs' : 'differ'} from ${control} (p ${differ.map((g) => formatP(r!.comparisons.find((c) => c.group === g && c.reference === control)!.pAdj)).join(', ')}), so the cohorts may not be interchangeable; check strain source, age and test date first.`
+                : 'Check that they share strain background, source and testing conditions before combining.'
+            }`,
+        options: [
+          {
+            label: 'Combine',
+            apply: (c) => (groupMembers(ds, c, c.controlGroup ?? '').length > 1 ? c : combineGroups(ds, c, [c.controlGroup ?? control, ...cohorts], c.controlGroup ?? control)),
+            active: (c) => groupMembers(ds, c, c.controlGroup ?? '').length > 1,
+          },
+        ],
+        manualOnly: true,
+        reset: (c) => (c.controlGroup ? splitGroup(ds, c, c.controlGroup) : c),
+        active,
+        summary: `control cohorts combined (${active ? merged.join(' + ') : [control, ...cohorts].join(' + ')})`,
+      })
+    }
+  }
+
+  // 6. Age differences: can only be noted (or handled with a filter on a key column)
   const ages = agg.groups.map((g) => agg.subjects.filter((s) => s.group === g && s.time === tr?.time && s.age !== undefined).map((s) => s.age!))
   const means = ages.filter((a) => a.length).map((a) => a.reduce((x, y) => x + y, 0) / a.length)
   if (means.length >= 2 && Math.max(...means) > Math.min(...means) * 1.2) {
