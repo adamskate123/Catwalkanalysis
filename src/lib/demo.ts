@@ -4,7 +4,7 @@
 import type { Cell, RawSheet } from './parse'
 import { PAWS, type Paw } from './catalog'
 
-function rng(seed: number) {
+export function rng(seed: number) {
   let s = seed >>> 0
   return () => {
     s = (s + 0x6d2b79f5) >>> 0
@@ -15,7 +15,7 @@ function rng(seed: number) {
   }
 }
 
-function gauss(r: () => number) {
+export function gauss(r: () => number) {
   let u = 0
   while (u === 0) u = r()
   const v = r()

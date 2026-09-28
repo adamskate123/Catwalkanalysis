@@ -2,6 +2,7 @@
 // Each refinement describes a possible confounder, whether it applies to this
 // dataset, and how to change the analysis settings to address it.
 
+import { program } from '../programs'
 import { aggregate, analyse, DEFAULT_MAX_VARIATION, distinctValues, type AggregateResult, type AnalysisConfig, type Measure, type TimeResults } from './analysis'
 import { changedMeasures, interpret, type InterpretOptions } from './interpret'
 import type { Dataset } from './parse'
@@ -110,18 +111,20 @@ export function refinements(ds: Dataset, measures: Measure[], agg: AggregateResu
 
   // 4. Too few runs per animal
   const fewRuns = agg.subjects.filter((s) => s.nRuns < MIN_RECOMMENDED_RUNS).length
-  if (cfg.subjectCol && (cfg.minRuns >= MIN_RECOMMENDED_RUNS || fewRuns > 0)) {
+  const runs = program().runsNoun
+  const repeated = program().features.speed || Boolean(program().trialDerived)
+  if (repeated && cfg.subjectCol && (cfg.minRuns >= MIN_RECOMMENDED_RUNS || fewRuns > 0)) {
     const active = cfg.minRuns >= MIN_RECOMMENDED_RUNS
     out.push({
       id: 'runs',
-      title: `Require at least ${MIN_RECOMMENDED_RUNS} runs per animal`,
+      title: `Require at least ${MIN_RECOMMENDED_RUNS} ${runs} per animal`,
       why: active
-        ? `Animals with fewer than ${MIN_RECOMMENDED_RUNS} usable runs are left out, so each animal's average is reliable.`
-        : `${fewRuns} animal-timepoint(s) have fewer than ${MIN_RECOMMENDED_RUNS} usable runs, so their averages are noisy. Excluding them makes each animal's value more reliable but lowers n.`,
+        ? `Animals with fewer than ${MIN_RECOMMENDED_RUNS} usable ${runs} are left out, so each animal's average is reliable.`
+        : `${fewRuns} animal-timepoint(s) have fewer than ${MIN_RECOMMENDED_RUNS} usable ${runs}, so their averages are noisy. Excluding them makes each animal's value more reliable but lowers n.`,
       options: [{ label: 'Require', apply: (c) => ({ ...c, minRuns: MIN_RECOMMENDED_RUNS }), active: (c) => c.minRuns >= MIN_RECOMMENDED_RUNS }],
       reset: (c) => ({ ...c, minRuns: 1 }),
       active,
-      summary: `at least ${MIN_RECOMMENDED_RUNS} runs per animal`,
+      summary: `at least ${MIN_RECOMMENDED_RUNS} ${runs} per animal`,
     })
   }
 
@@ -135,7 +138,7 @@ export function refinements(ds: Dataset, measures: Measure[], agg: AggregateResu
       why: `Age ranges: ${agg.groups
         .map((g, i) => (ages[i].length ? `${g} ${Math.min(...ages[i])}–${Math.max(...ages[i])}` : ''))
         .filter(Boolean)
-        .join('; ')}. Gait changes with growth, so part of a group difference may reflect age. This can't be adjusted automatically here; use age-matched animals, or restrict animals with a filter in Setup.`,
+        .join('; ')}. ${program().features.paws ? 'Gait changes with growth' : 'Performance changes with age and body size'}, so part of a group difference may reflect age. This can't be adjusted automatically here; use age-matched animals, or restrict animals with a filter in Setup.`,
       options: [],
       reset: (c) => c,
       active: false,

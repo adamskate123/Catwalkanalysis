@@ -16,9 +16,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Gait Lab · CatWalk Analyzer',
-        short_name: 'Gait Lab',
-        description: 'Analyze CatWalk XT gait exports: graphs, statistics and phenotype summaries.',
+        name: 'Behavior Lab · Gait, Rotarod, Open Field',
+        short_name: 'Behavior Lab',
+        description: 'Analyze CatWalk gait, rotarod and open field data: graphs, statistics and phenotype summaries.',
         theme_color: '#2a78d6',
         background_color: '#f9f9f7',
         display: 'standalone',

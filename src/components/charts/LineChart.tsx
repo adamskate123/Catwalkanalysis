@@ -36,6 +36,8 @@ export function LineChart({ series, xs, theme, unit, height = 260, title, svgRef
   const y = linear(ticks[0], ticks[ticks.length - 1], m.t + ph, m.t)
   const step = xs.length > 1 ? pw / (xs.length - 1) : 0
   const x = (i: number) => (xs.length > 1 ? m.l + i * step : m.l + pw / 2)
+  const labelWidth = Math.max(0, ...xs.map((l) => l.length)) * 6.3 + 8
+  const labelEvery = step > 0 ? Math.max(1, Math.ceil(labelWidth / step)) : 1
   const dodge = (si: number) => (series.length > 1 ? (si - (series.length - 1) / 2) * Math.min(6, step / 8 || 6) : 0)
 
   // Direct end labels only when they don't collide; otherwise the legend carries identity.
@@ -71,11 +73,14 @@ export function LineChart({ series, xs, theme, unit, height = 260, title, svgRef
             {unit}
           </text>
         )}
-        {xs.map((lab, i) => (
-          <text key={lab} x={x(i)} y={m.t + ph + 18} textAnchor="middle" fontSize={11} fill={theme.text2}>
-            {lab}
-          </text>
-        ))}
+        {xs.map((lab, i) =>
+          // Skip labels that would overlap (the tooltip still names every point).
+          i % labelEvery === 0 || i === xs.length - 1 ? (
+            <text key={lab} x={x(i)} y={m.t + ph + 18} textAnchor={xs.length > 1 && i === xs.length - 1 && m.r < labelWidth / 2 ? 'end' : 'middle'} fontSize={11} fill={theme.text2}>
+              {lab}
+            </text>
+          ) : null,
+        )}
         <line x1={m.l} x2={m.l + pw} y1={m.t + ph} y2={m.t + ph} stroke={theme.axis} strokeWidth={1} />
         {series.map((s, si) => {
           const pts = xs

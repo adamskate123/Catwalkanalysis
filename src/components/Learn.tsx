@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CATEGORY_LABELS, CATEGORY_ORDER, PARAMS } from '../lib/catalog'
-import { DOMAINS } from '../lib/interpret'
+import { CATWALK_DOMAINS as DOMAINS } from '../programs/catwalk-domains'
 import { FootprintDiagram, IntensityDiagram, StepCycleDiagram, StepPatternDiagram, SupportDiagram, WalkwayDiagram } from './diagrams'
 
 // References verified in PubMed.

@@ -1,12 +1,5 @@
-import {
-  CATEGORY_ORDER,
-  PAWS,
-  PARAM_BY_ID,
-  otherParam,
-  type Paw,
-  type ParamDef,
-  type StatKind,
-} from './catalog'
+import { PAWS, otherParam, type Paw, type ParamDef, type StatKind } from './catalog'
+import { paramById, program, type TrialDerived } from '../programs'
 import { SOURCE_COL, toNumber, type Cell, type Dataset } from './parse'
 import {
   benjaminiHochberg,
@@ -35,6 +28,8 @@ export interface Measure {
   paw?: Paw
   variant?: string
   derived?: DerivedKind
+  /** Computed per animal from the ordered trials of a measure (best, first, last, improvement). */
+  trial?: { source: string; how: TrialDerived['how'] }
   col?: number
   stat: StatKind
   label: string
@@ -61,7 +56,8 @@ export function buildMeasures(ds: Dataset): Measure[] {
   ds.columns.forEach((c, col) => {
     if (c.meta || c.numericShare < 0.8 || c.distinct < 2) return
     if (c.match) {
-      const def = PARAM_BY_ID[c.match.paramId]
+      const def = paramById(c.match.paramId)
+      if (!def) return
       const key = `${def.id}|${c.match.paw ?? c.match.variant ?? ''}`
       const existing = byKey.get(key)
       if (existing && STAT_PREFERENCE.indexOf(existing.stat) <= STAT_PREFERENCE.indexOf(c.match.stat)) return
@@ -91,9 +87,18 @@ export function buildMeasures(ds: Dataset): Measure[] {
   }
   for (const [id, arr] of perPaw) {
     if (arr.length < 4) continue
-    const def = PARAM_BY_ID[id]
+    const def = paramById(id)!
     for (const d of ['FRONT', 'HIND', 'ASYM_F', 'ASYM_H'] as DerivedKind[]) {
       measures.push({ key: `${id}|${d}`, def, derived: d, stat: 'mean', label: measureLabel(def, undefined, undefined, d) })
+    }
+  }
+  // Per-animal summaries across trials (rotarod best/first/last trial), when rows are trials.
+  if (ds.columns.some((c) => c.meta === 'run')) {
+    for (const td of program().trialDerived ?? []) {
+      const src = measures.find((m) => m.def.id === td.from && m.col !== undefined && !m.paw && !m.variant)
+      const def = paramById(td.id)
+      if (!src || !def || measures.some((m) => m.def.id === td.id)) continue
+      measures.push({ key: `${td.id}|trials`, def, trial: { source: src.key, how: td.how }, stat: 'mean', label: def.label })
     }
   }
   return sortMeasures(measures)
@@ -103,13 +108,18 @@ const PAW_ORDER: Record<string, number> = { LF: 0, RF: 1, LH: 2, RH: 3 }
 const DERIVED_ORDER: Record<DerivedKind, number> = { FRONT: 4, HIND: 5, ASYM_F: 6, ASYM_H: 7 }
 
 export function sortMeasures(ms: Measure[]): Measure[] {
+  const { params, categoryOrder } = program()
   const paramIndex = (m: Measure) => {
-    const i = Object.keys(PARAM_BY_ID).indexOf(m.def.id)
+    const i = params.findIndex((p) => p.id === m.def.id)
+    return i < 0 ? 999 : i
+  }
+  const catIndex = (m: Measure) => {
+    const i = categoryOrder.indexOf(m.def.category)
     return i < 0 ? 999 : i
   }
   return [...ms].sort(
     (a, b) =>
-      CATEGORY_ORDER.indexOf(a.def.category) - CATEGORY_ORDER.indexOf(b.def.category) ||
+      catIndex(a) - catIndex(b) ||
       paramIndex(a) - paramIndex(b) ||
       (a.paw ? PAW_ORDER[a.paw] : a.derived ? DERIVED_ORDER[a.derived] : -1) -
         (b.paw ? PAW_ORDER[b.paw] : b.derived ? DERIVED_ORDER[b.derived] : -1) ||
@@ -270,6 +280,17 @@ export interface AggregateResult {
   speedSlopes: Record<string, number>
   groups: string[]
   times: string[]
+  /** Row-level values when rows are individual trials/runs with a trial number (for learning curves). */
+  trials: TrialRow[]
+}
+
+export interface TrialRow {
+  id: string
+  group: string
+  time: string
+  trial: string
+  order: number
+  values: Record<string, number>
 }
 
 export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig): AggregateResult {
@@ -282,6 +303,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
   const nri = ds.columns.findIndex((c) => c.meta === 'nruns')
   const sexi = ds.columns.findIndex((c) => c.meta === 'sex')
   const agei = ds.columns.findIndex((c) => /^age\b/i.test(c.name) && c.numericShare > 0.8)
+  const runi = ds.columns.findIndex((c) => c.meta === 'run')
   const filters = cfg.filters.map((f) => ({ i: colIndex(ds, f.col), values: new Set(f.values) })).filter((f) => f.i >= 0)
   const raw = measures.filter((m) => m.col !== undefined)
 
@@ -294,6 +316,8 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     nRuns: number
     sex?: string
     age?: number
+    order: number
+    trial: string
   }
   const rows: Row[] = []
   let nonCompliant = 0
@@ -330,6 +354,8 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       nRuns: nri >= 0 ? (toNumber(r[nri]) ?? 1) : 1,
       sex: sexi >= 0 ? cellText(r[sexi]) || undefined : undefined,
       age: agei >= 0 ? (toNumber(r[agei]) ?? undefined) : undefined,
+      order: runi >= 0 ? runOrder(r[runi], idx) : idx,
+      trial: runi >= 0 ? cellText(r[runi]) : '',
     })
   })
 
@@ -367,6 +393,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       values[m.key] = mean(finite(arr.map((r) => r.v[j])))
     })
     addDerived(values, measures)
+    addTrialDerived(values, measures, raw, arr)
     subjects.push({
       id: arr[0].subject,
       group: arr[0].group,
@@ -395,6 +422,64 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     speedSlopes,
     groups,
     times,
+    trials:
+      runi >= 0
+        ? rows
+            .filter((r) => r.trial && subjects.some((s) => s.id === r.subject && s.group === r.group && s.time === r.time))
+            .map((r) => ({ id: r.subject, group: r.group, time: r.time, trial: r.trial, order: r.order, values: Object.fromEntries(raw.map((m, j) => [m.key, r.v[j]])) }))
+        : [],
+  }
+}
+
+/** Every (timepoint, trial) pair present, in order; labels read "Day 1 · 2" when there are several timepoints. */
+export function trialAxis(agg: AggregateResult, noun = 'Trial'): { label: string; time: string; trial: string }[] {
+  const first = new Map<string, number>()
+  for (const t of agg.trials) first.set(t.trial, Math.min(first.get(t.trial) ?? Infinity, t.order))
+  const trials = [...first.keys()].sort((a, b) => first.get(a)! - first.get(b)! || naturalCompare(a, b))
+  const times = agg.times.length ? agg.times : ['']
+  const present = new Set(agg.trials.map((t) => `${t.time}\u0000${t.trial}`))
+  return times.flatMap((time) =>
+    trials
+      .filter((trial) => present.has(`${time}\u0000${trial}`))
+      .map((trial) => ({ time, trial, label: times.length > 1 ? `${time} · ${trial}` : /^\d/.test(trial) ? `${noun} ${trial}` : trial })),
+  )
+}
+
+/** One value per animal for a trial (duplicate rows averaged). */
+export function trialValue(agg: AggregateResult, key: string, id: string, group: string, time: string, trial: string): number {
+  return mean(finite(agg.trials.filter((r) => r.id === id && r.group === group && r.time === time && r.trial === trial).map((r) => r.values[key])))
+}
+
+/** Position of a trial/run: its number ("Trial 3" → 3); rows without one keep file order. */
+function runOrder(c: Cell, idx: number): number {
+  const n = toNumber(c) ?? (typeof c === 'string' ? Number(/\d+(\.\d+)?/.exec(c)?.[0] ?? NaN) : NaN)
+  return Number.isFinite(n) ? n * 1e6 + idx : 1e12 + idx
+}
+
+function addTrialDerived(values: Record<string, number>, measures: Measure[], raw: Measure[], rows: { v: number[]; order: number }[]) {
+  const sorted = [...rows].sort((a, b) => a.order - b.order)
+  for (const m of measures) {
+    if (!m.trial) continue
+    const j = raw.findIndex((x) => x.key === m.trial!.source)
+    const xs = j < 0 ? [] : finite(sorted.map((r) => r.v[j]))
+    let out = NaN
+    if (xs.length) {
+      switch (m.trial.how) {
+        case 'max':
+          out = Math.max(...xs)
+          break
+        case 'first':
+          out = xs[0]
+          break
+        case 'last':
+          out = xs[xs.length - 1]
+          break
+        case 'improvement':
+          out = xs.length > 1 ? xs[xs.length - 1] - xs[0] : NaN
+          break
+      }
+    }
+    values[m.key] = out
   }
 }
 

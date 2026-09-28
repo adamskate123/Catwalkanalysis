@@ -1,3 +1,4 @@
+import { program } from '../programs'
 import { DEFAULT_MAX_VARIATION } from './analysis'
 import type { Dataset } from './parse'
 import {
@@ -70,12 +71,12 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
       if (hi > lo * 1.2)
         w.push({
           level: 'warning',
-          text: `Groups differ in age (${means.map((m) => `${m.g}: ${m.min === m.max ? m.min : `${m.min}–${m.max}`}`).join('; ')}). Gait parameters change with growth, so part of any group difference may reflect age.`,
+          text: `Groups differ in age (${means.map((m) => `${m.g}: ${m.min === m.max ? m.min : `${m.min}–${m.max}`}`).join('; ')}). ${program().features.paws ? 'Gait parameters change with growth' : 'Motor performance and activity change with age and body size'}, so part of any group difference may reflect age.`,
         })
     }
   }
   if (!cfg.groupCol) w.push({ level: 'warning', text: 'No group column is selected, so there is nothing to compare. Choose a group column in Setup.' })
-  if (!cfg.subjectCol) w.push({ level: 'info', text: 'No animal ID column is selected, so every row is treated as a separate animal. If your file has several runs per animal, choose the ID column so runs are averaged first (otherwise n is inflated).' })
+  if (!cfg.subjectCol) w.push({ level: 'info', text: `No animal ID column is selected, so every row is treated as a separate animal. If your file has several ${program().runsNoun} per animal, choose the ID column so ${program().runsNoun} are averaged first (otherwise n is inflated).` })
   if (!tr) return w
   const small = agg.groups.filter((g) => {
     const n = Math.max(0, ...tr.results.slice(0, 5).map((r) => r.groups[g]?.n ?? 0))
@@ -90,12 +91,18 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
         level: 'warning',
         text: `Walking speed differs between ${c.group} and ${c.reference} (p = ${formatP(c.pAdj)}, ${c.diffPct > 0 ? '+' : ''}${c.diffPct.toFixed(0)}%). Most CatWalk parameters change with speed; consider turning on speed adjustment in Setup before interpreting temporal and spatial parameters.`,
       })
-  } else {
+  } else if (program().features.speed) {
     w.push({ level: 'info', text: 'No average-speed column was found, so speed adjustment is unavailable.' })
   }
-  if (agg.subjects.some((s) => s.nRuns < 3) && cfg.subjectCol) {
+  const repeated = program().features.speed || Boolean(program().trialDerived)
+  if (repeated && agg.subjects.some((s) => s.nRuns < 3) && cfg.subjectCol) {
     const k = agg.subjects.filter((s) => s.nRuns < 3).length
-    w.push({ level: 'info', text: `${k} animal-timepoint(s) have fewer than 3 compliant runs. Noldus and most labs recommend at least 3 compliant runs per animal.` })
+    w.push({
+      level: 'info',
+      text: program().features.speed
+        ? `${k} animal-timepoint(s) have fewer than 3 compliant runs. Noldus and most labs recommend at least 3 compliant runs per animal.`
+        : `${k} animal-timepoint(s) have fewer than 3 ${program().runsNoun}. Most protocols average at least 3 ${program().runsNoun} per animal per session.`,
+    })
   }
   return w
 }
@@ -107,6 +114,8 @@ export function topChanges(tr: TimeResults, cfg: AnalysisConfig, opt: InterpretO
     .sort((a, b) => Math.abs(b.c.g) - Math.abs(a.c.g))
     .slice(0, k)
 }
+
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 
 export function narrative(
   agg: AggregateResult,
@@ -120,7 +129,7 @@ export function narrative(
   const counts = agg.groups.map((g) => `${g} (n = ${subs.filter((s) => s.group === g).length})`).join(', ')
   const when = tr.time ? ` at ${tr.time}` : ''
   out.push(
-    `${subs.length} animals${when} were analysed: ${counts}. ${cfg.subjectCol ? `Runs were averaged per animal (${formatNum(subs.reduce((s, x) => s + x.nRuns, 0) / Math.max(1, subs.length), 2)} runs per animal on average)` : 'Each row was treated as one animal'}${cfg.onlyCompliant && cfg.compliantCol ? ' and only compliant runs were used' : ''}${cfg.maxVariation !== null ? `; runs with more than ${cfg.maxVariation}% speed variation were excluded` : ''}${cfg.filters.length ? `; analysis restricted to ${cfg.filters.map((f) => `${f.col} = ${f.values.join(' or ')}`).join(', ')}` : ''}.${cfg.speedAdjust ? ' Values were adjusted to the mean walking speed using a pooled within-animal regression on speed.' : ''}`,
+    `${subs.length} animals${when} were analysed: ${counts}. ${cfg.subjectCol ? `${cap(program().runsNoun)} were averaged per animal (${formatNum(subs.reduce((s, x) => s + x.nRuns, 0) / Math.max(1, subs.length), 2)} ${program().runsNoun} per animal on average)` : 'Each row was treated as one animal'}${cfg.onlyCompliant && cfg.compliantCol ? ' and only compliant runs were used' : ''}${cfg.maxVariation !== null ? `; runs with more than ${cfg.maxVariation}% speed variation were excluded` : ''}${cfg.filters.length ? `; analysis restricted to ${cfg.filters.map((f) => `${f.col} = ${f.values.join(' or ')}`).join(', ')}` : ''}.${cfg.speedAdjust ? ' Values were adjusted to the mean walking speed using a pooled within-animal regression on speed.' : ''}`,
   )
   const primaryRef = cfg.diseaseGroup ? `${cfg.diseaseGroup} vs ${cfg.controlGroup}` : `each group vs ${cfg.controlGroup ?? 'the reference group'}`
   const nSig = tr.results.filter((r) => {
@@ -167,7 +176,7 @@ export function narrative(
 }
 
 export function reportMarkdown(agg: AggregateResult, results: TimeResults[], cfg: AnalysisConfig, opt: InterpretOptions): string {
-  const lines: string[] = ['# CatWalk gait analysis summary', '']
+  const lines: string[] = [`# ${program().name}: ${program().test} summary`, '']
   for (const tr of results) {
     if (tr.time) lines.push(`## ${tr.time}`, '')
     for (const p of narrative(agg, tr, cfg, opt)) lines.push(p, '')

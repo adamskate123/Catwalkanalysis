@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
+import { program } from '../../programs'
 import { formatNum, formatP, stars } from '../../lib/analysis'
-import { CATEGORY_LABELS } from '../../lib/catalog'
 import { downloadPng, downloadSvg, safeName } from '../../lib/export'
 import { DivergingLegend, Heatmap, type HeatCell, type HeatRow } from '../charts/Heatmap'
 import type { TabProps } from './types'
@@ -25,7 +25,7 @@ export function TimeTab({ results, theme, cfg, openMeasure }: TabProps) {
   const rows: HeatRow[] = keys.map((m) => ({
     key: m.key,
     label: m.label,
-    section: CATEGORY_LABELS[m.def.category],
+    section: program().categoryLabels[m.def.category],
     cells: results
       .map((t): HeatCell | null => {
         const r = t.results.find((x) => x.measure.key === m.key)

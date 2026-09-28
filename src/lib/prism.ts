@@ -7,13 +7,16 @@
 //    repeated-measures two-way ANOVA / mixed-effects analysis can be run directly.
 
 import type { AggregateResult, AnalysisConfig, Measure } from './analysis'
-import { naturalCompare } from './analysis'
+import { naturalCompare, trialAxis, trialValue } from './analysis'
+import { program } from '../programs'
 
 export interface PrismOptions {
   measures: Measure[]
   layout: 'column' | 'grouped' | 'both'
   appVersion: string
   notes?: string
+  /** Word for one row of the raw data ("trial"); grouped tables by trial use it. */
+  runNoun?: string
 }
 
 export interface PzfxTable {
@@ -100,6 +103,29 @@ export function buildPrismTables(agg: AggregateResult, opt: PrismOptions): PzfxT
     }
   }
 
+  if ((opt.layout === 'grouped' || opt.layout === 'both') && opt.runNoun && agg.trials.length) {
+    // Learning curves: rows = (timepoint ·) trial, replicate subcolumns = animals.
+    const noun = opt.runNoun
+    const axis = trialAxis(agg, noun[0].toUpperCase() + noun.slice(1))
+    for (const m of opt.measures) {
+      if (m.col === undefined) continue
+      const columns = agg.groups.map((g) => {
+        const ids = [...new Set(agg.trials.filter((r) => r.group === g).map((r) => r.id))].sort(naturalCompare)
+        return {
+          title: g,
+          subcolumns: ids.map((id) =>
+            axis.map((a) => {
+              const v = trialValue(agg, m.key, id, g, a.time, a.trial)
+              return Number.isFinite(v) ? v : null
+            }),
+          ),
+        }
+      })
+      if (axis.length < 2 || !columns.some((c) => c.subcolumns.some((sc) => sc.some((v) => v !== null)))) continue
+      tables.push({ title: `${titleOf(m)} · by ${noun}`, type: 'TwoWay', rowTitles: axis.map((a) => a.label), columns })
+    }
+  }
+
   const titles = uniqueTitles(tables.map((t) => t.title))
   tables.forEach((t, i) => (t.title = titles[i]))
   return tables
@@ -134,7 +160,7 @@ function tableXml(t: PzfxTable, i: number): string {
 export function toPzfx(tables: PzfxTable[], opt: { appVersion: string; notes?: string; created?: Date }): string {
   const when = (opt.created ?? new Date()).toISOString().replace(/\.\d+Z$/, '')
   const notes =
-    `Exported from Gait Lab (CatWalk Analyzer) v${opt.appVersion} on ${when.slice(0, 10)}.` + (opt.notes ? ` ${opt.notes}` : '')
+    `Exported from ${program().name} (Behavior Lab) v${opt.appVersion} on ${when.slice(0, 10)}.` + (opt.notes ? ` ${opt.notes}` : '')
   const parts: string[] = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<GraphPadPrismFile PrismXMLVersion="5.00">',
@@ -145,7 +171,7 @@ export function toPzfx(tables: PzfxTable[], opt: { appVersion: string; notes?: s
     '<Constant><Name>Experiment Date</Name><Value></Value></Constant>',
     '<Constant><Name>Experiment ID</Name><Value></Value></Constant>',
     '<Constant><Name>Notebook ID</Name><Value></Value></Constant>',
-    '<Constant><Name>Project</Name><Value>CatWalk gait analysis</Value></Constant>',
+    `<Constant><Name>Project</Name><Value>${esc(program().test)}</Value></Constant>`,
     '<Constant><Name>Experimenter</Name><Value></Value></Constant>',
     '<Constant><Name>Protocol</Name><Value></Value></Constant>',
     '</Info>',
@@ -160,9 +186,7 @@ export function toPzfx(tables: PzfxTable[], opt: { appVersion: string; notes?: s
 
 export function describeSettings(cfg: AnalysisConfig): string {
   return [
-    'Values are per-animal means of',
-    cfg.onlyCompliant && cfg.compliantCol ? 'compliant runs' : 'all runs',
-    cfg.speedAdjust ? '(speed-adjusted).' : '(not speed-adjusted).',
+    `Values are per-animal means of ${cfg.onlyCompliant && cfg.compliantCol ? 'compliant' : 'all'} ${program().runsNoun}${program().features.speed ? (cfg.speedAdjust ? ' (speed-adjusted)' : ' (not speed-adjusted)') : ''}.`,
     `Groups: ${cfg.groupCol ?? 'none'}; control: ${cfg.controlGroup ?? '—'}${cfg.diseaseGroup ? `; untreated disease: ${cfg.diseaseGroup}` : ''}.`,
   ].join(' ')
 }

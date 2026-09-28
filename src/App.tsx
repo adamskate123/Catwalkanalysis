@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader } from './components/Loader'
 import { Results } from './components/Results'
 import { Learn } from './components/Learn'
-import { Logo } from './components/Logo'
+import { ProgramMenu } from './components/ProgramMenu'
+import { LearnProgram } from './components/LearnProgram'
+import { PROGRAMS, program, setProgram, type ProgramId } from './programs'
 import { Changelog } from './components/Changelog'
 import { APP_VERSION } from './version'
 import { mergeTables } from './lib/parse'
@@ -21,8 +23,21 @@ function initialView(): View {
   return 'analyze'
 }
 
+const PROGRAM_KEY = 'program'
+
+function initialProgram(): ProgramId {
+  let id: string | null = null
+  try {
+    id = localStorage.getItem(PROGRAM_KEY)
+  } catch {
+    /* storage unavailable */
+  }
+  return setProgram(PROGRAMS.some((p) => p.id === id) ? (id as ProgramId) : 'catwalk').id
+}
+
 export default function App() {
   const [view, setView] = useState<View>(initialView)
+  const [programId, setProgramId] = useState<ProgramId>(initialProgram)
   const [experiment, setExperiment] = useState<Experiment | null>(null)
   const [cfg, setCfg] = useState<AnalysisConfig | null>(null)
   const [opt, setOpt] = useState<InterpretOptions>(DEFAULT_INTERPRET)
@@ -63,6 +78,29 @@ export default function App() {
     else window.scrollTo({ top: 0 })
   }
 
+  useEffect(() => {
+    document.title = `${program().name} · Behavior Lab`
+  }, [programId])
+
+  /** Makes a program active (the engine reads it synchronously) and remembers it. */
+  const activate = (id: ProgramId) => {
+    setProgram(id)
+    setProgramId(id)
+    try {
+      localStorage.setItem(PROGRAM_KEY, id)
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
+  const switchProgram = (id: ProgramId) => {
+    if (id === programId) return
+    activate(id)
+    reset()
+    if (view === 'changes') go('analyze')
+    else window.scrollTo({ top: 0 })
+  }
+
   const refreshLibrary = useCallback(() => {
     listExperiments()
       .then(setLibrary)
@@ -96,6 +134,7 @@ export default function App() {
     files.map((f) => ({ id: newId(), name: f.name, addedAt: new Date().toISOString(), session: session || undefined, tables: f.tables }))
 
   const openExperiment = (e: Experiment, persistNow = false) => {
+    activate(e.program ?? 'catwalk')
     const ds0 = mergeTables(experimentTables(e))
     const cfg0 = reconcileConfig(e.cfg, ds0)
     setExperiment(e)
@@ -125,6 +164,7 @@ export default function App() {
       createdAt: now,
       updatedAt: now,
       files: stored,
+      program: programId,
       appVersion: APP_VERSION,
     }, true)
   }
@@ -198,10 +238,7 @@ export default function App() {
     <>
       <header className="topbar">
         <div className="topbar-inner">
-          <div className="brand">
-            <Logo />
-            <span>Gait Lab</span>
-          </div>
+          <ProgramMenu current={programId} onSelect={switchProgram} />
           <nav className="nav" aria-label="Main">
             <button aria-current={view === 'analyze' ? 'page' : undefined} onClick={() => go('analyze')}>
               Analyze
@@ -219,7 +256,7 @@ export default function App() {
         {view === 'changes' ? (
           <Changelog />
         ) : view === 'learn' ? (
-          <Learn onAnalyze={() => go('analyze')} />
+          programId === 'catwalk' ? <Learn onAnalyze={() => go('analyze')} /> : <LearnProgram id={programId} onAnalyze={() => go('analyze')} />
         ) : ds && cfg && agg && results ? (
           <Results
             ds={ds}
@@ -249,7 +286,9 @@ export default function App() {
           <Loader
             onLoaded={onLoaded}
             onLearn={() => go('learn')}
-            experiments={library}
+            experiments={library.filter((e) => e.program === programId)}
+            otherCounts={Object.fromEntries(PROGRAMS.filter((p) => p.id !== programId).map((p) => [p.id, library.filter((e) => e.program === p.id).length]))}
+            onSwitch={(id) => switchProgram(id as ProgramId)}
             onOpen={openById}
             onDelete={removeExperiment}
             onImport={importBackup}
@@ -258,7 +297,7 @@ export default function App() {
       </main>
       <footer className="app-footer">
         <button className="btn ghost sm" style={{ padding: 0, minHeight: 0 }} onClick={() => go('changes')}>
-          Gait Lab v{APP_VERSION} · What's new
+          Behavior Lab v{APP_VERSION} · What's new
         </button>
         <br />
         All processing happens on this device; your files are never uploaded. For research use; automated interpretations are not diagnoses.

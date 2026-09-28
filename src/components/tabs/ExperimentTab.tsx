@@ -1,3 +1,5 @@
+import { program } from '../../programs'
+import { ImportOptionsField } from '../Loader'
 import { useRef, useState } from 'react'
 import { SESSION_COL, toBundle, type Experiment } from '../../lib/experiment'
 import { download, safeName } from '../../lib/export'
@@ -48,12 +50,13 @@ export function ExperimentTab({ experiment, ds, onUpdate, onAddFiles, onDelete }
       <div className="card">
         <h2>Add data</h2>
         <p className="small">
-          Add new CatWalk exports, or updated versions of files you added before, plus updated animal keys. Rows that appear again (same experiment, animal, trial,
-          timepoint/session and run) replace the earlier copy, so re-exporting the whole CatWalk experiment each time is fine. New animals, groups and
-          timepoints are added to the analysis, and your settings are kept.
+          Add new {program().instrument}, Excel or Prism files, or updated versions of files you added before, plus updated animal keys. Rows that appear
+          again (same animal, timepoint/session and {program().runNoun}) replace the earlier copy, so re-exporting the whole experiment each time is fine. New
+          animals, groups and timepoints are added to the analysis, and your settings are kept.
         </p>
+        <ImportOptionsField />
         <div className="row">
-          <input ref={input} type="file" multiple hidden accept=".xlsx,.xlsm,.csv,.txt,.tsv" onChange={(e) => (pick(e.target.files), (e.target.value = ''))} />
+          <input ref={input} type="file" multiple hidden accept=".xlsx,.xlsm,.csv,.txt,.tsv,.prism" onChange={(e) => (pick(e.target.files), (e.target.value = ''))} />
           <button className="btn" onClick={() => input.current?.click()} disabled={busy}>
             {busy ? 'Reading…' : 'Choose files'}
           </button>
@@ -82,7 +85,7 @@ export function ExperimentTab({ experiment, ds, onUpdate, onAddFiles, onDelete }
                 ))}
               </datalist>
               <span className="hint">
-                Use this when CatWalk's Time_Point was left as "Undefined". Every row in these files gets this label in a "{SESSION_COL}" column, which
+                Use this when the files have no timepoint column (or CatWalk's Time_Point was left as "Undefined"). Every row in these files gets this label in a "{SESSION_COL}" column, which
                 becomes the timepoint for longitudinal analysis.
                 {usesSessions ? ' Earlier files in this experiment use session labels, so label these too.' : ''}
               </span>
@@ -181,7 +184,7 @@ export function ExperimentTab({ experiment, ds, onUpdate, onAddFiles, onDelete }
         <h2>Backup and devices</h2>
         <p className="small">
           Experiments are saved in this browser on this device only. To use one on another device, or to keep a safe copy, export a backup file and open it
-          in Gait Lab elsewhere (drop it on the start screen). Browsers can clear saved data, especially Safari on iPhone and iPad for sites not added to
+          in Behavior Lab elsewhere (drop it on the start screen). Browsers can clear saved data, especially Safari on iPhone and iPad for sites not added to
           the Home Screen, so export a backup after each session.
         </p>
         <div className="row">

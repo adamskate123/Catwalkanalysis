@@ -11,16 +11,8 @@ export const PAW_NAMES: Record<Paw, string> = {
   RH: 'Right hind',
 }
 
-export type Category =
-  | 'run'
-  | 'static'
-  | 'temporal'
-  | 'spatial'
-  | 'kinetic'
-  | 'coordination'
-  | 'support'
-  | 'positioning'
-  | 'other'
+/** Parameter category id. Each program defines its own set; 'other' is shared. */
+export type Category = string
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   run: 'Run characteristics',
@@ -731,6 +723,32 @@ export function normalizeKey(s: string): string {
     .replace(/[^a-z0-9]+/g, '')
 }
 
+/** Splits a trailing statistic (Mean, SD, …) off a column name. */
+export function splitStat(name: string): { rest: string; stat: StatKind } {
+  let rest = name.trim()
+  for (const [re, kind] of STAT_SUFFIX) {
+    if (re.test(rest)) {
+      const stripped = rest.replace(re, '')
+      if (normalizeKey(stripped).length > 0) return { rest: stripped, stat: kind }
+      break
+    }
+  }
+  return { rest, stat: 'value' }
+}
+
+/**
+ * Generic matcher for programs without per-paw parameters: strips a
+ * trailing statistic and tests the normalised name against each parameter's
+ * pattern in order.
+ */
+export function matchByParams(name: string, params: ParamDef[]): ColumnMatch | null {
+  const { rest, stat } = splitStat(name)
+  const key = normalizeKey(rest)
+  if (!key) return null
+  for (const def of params) if (def.match.test(key)) return { paramId: def.id, stat: stat === 'r' ? 'mean' : stat }
+  return null
+}
+
 export function matchColumn(name: string): ColumnMatch | null {
   // CatWalk XT 10 prefixes some whole-run values with "OtherStatistics_"
   let rest = name.trim().replace(/^other[\s_]*statistics[\s_]*/i, '')
@@ -816,6 +834,7 @@ const META_PATTERNS: [RegExp, MetaRole][] = [
   [/^(group|genotype|treatment|condition|cohort|strain|line|dose|arm|vector|cohort\s*name)\b/i, 'group'],
   [/^(time\s*point|timepoint|time|week|weeks|day|days|session|visit|pod|dpi|wpi)\b/i, 'time'],
   [/^run(\s*(id|nr|no|number|name))?$/i, 'run'],
+  [/^replicate(\s*(nr|no|number))?$/i, 'run'],
   [/complian/i, 'compliant'],
   [/^(catwalk\s*)?trial(\s*(id|name|nr|no|number))?$/i, 'trial'],
   [/^(sex|gender)$/i, 'sex'],

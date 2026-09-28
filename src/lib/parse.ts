@@ -1,6 +1,11 @@
 import Papa from 'papaparse'
 import readXlsxFile from 'read-excel-file/universal'
-import { matchColumn, metaRole, type ColumnMatch, type MetaRole } from './catalog'
+import type { ColumnMatch, MetaRole } from './catalog'
+import { program, roleOf } from '../programs'
+import { readPrismProject, reshapeTable, type ImportOptions } from './importers'
+
+const matchColumn = (name: string) => program().matchColumn(name)
+const metaRole = roleOf
 
 export type Cell = string | number | null
 
@@ -8,6 +13,8 @@ export interface RawSheet {
   file: string
   sheet: string
   cells: Cell[][]
+  /** Messages from the importer (e.g. sheets it skipped), shown when the file is loaded. */
+  notes?: string[]
 }
 
 export interface ParsedTable {
@@ -42,9 +49,13 @@ function normaliseCell(v: unknown): Cell {
 /** Placeholders CatWalk and Excel use for "no value". */
 export const MISSING = /^(nan|n\/a|na|-|—|null|#n\/a|#div\/0!|#value!)$/i
 
-export async function readFile(file: File): Promise<RawSheet[]> {
+export async function readFile(file: File, opts: ImportOptions = {}): Promise<RawSheet[]> {
   const name = file.name
   const lower = name.toLowerCase()
+  if (lower.endsWith('.prism')) return readPrismProject(new Uint8Array(await file.arrayBuffer()), name, opts)
+  if (lower.endsWith('.pzfx')) {
+    throw new Error(`${name}: older Prism .pzfx files aren't read yet. In Prism 10, save the project as .prism, or copy the data table into Excel.`)
+  }
   if (lower.endsWith('.xlsx') || lower.endsWith('.xlsm')) {
     const buf = await file.arrayBuffer()
     return readWorkbook(buf, name)
@@ -193,9 +204,9 @@ export function detectTable(sheet: RawSheet): ParsedTable | null {
   }
 }
 
-/** Picks the sheet(s) in a workbook that look like CatWalk run statistics. */
-export function pickTables(sheets: RawSheet[]): ParsedTable[] {
-  const tables = sheets.map(detectTable).filter((t): t is ParsedTable => t !== null && t.rows.length > 0)
+/** Picks the sheet(s) in a workbook that hold the program's measurements. */
+export function pickTables(sheets: RawSheet[], opts: ImportOptions = {}): ParsedTable[] {
+  const tables = reshapeTables(sheets.map(detectTable).filter((t): t is ParsedTable => t !== null && t.rows.length > 0), opts)
   const scored = tables.map((t) => ({
     t,
     s: t.headers.filter((h) => matchColumn(h)).length,
@@ -231,9 +242,52 @@ export interface Dataset {
 
 export const SOURCE_COL = 'Source file'
 
-/** A table with (almost) no CatWalk parameters is treated as an animal key / metadata sheet. */
+/** A table with (almost) no recognised parameters is treated as an animal key / metadata sheet. */
 export function isKeyTable(t: ParsedTable): boolean {
-  return t.headers.filter((h) => matchColumn(h)).length < 3
+  return t.headers.filter((h) => !metaRole(h) && matchColumn(h)).length < program().keyMinParams
+}
+
+/**
+ * Converts Prism-style (groups as columns), long (measure/value) and wide-trial
+ * layouts to one row per animal (and trial), and joins sheets of the same file
+ * that were reshaped that way into one table.
+ */
+function reshapeTables(tables: ParsedTable[], opts: ImportOptions): ParsedTable[] {
+  const out: ParsedTable[] = []
+  const joined = new Map<string, ParsedTable[]>()
+  for (const t of tables) {
+    const r = reshapeTable(t, opts)
+    if (r === t) out.push(t)
+    else joined.set(t.file, [...(joined.get(t.file) ?? []), r])
+  }
+  for (const list of joined.values()) out.push(joinOnIds(list))
+  return out
+}
+
+/** Full outer join of tables on their shared ID columns (animal, group, sex, time, trial). */
+export function joinOnIds(tables: ParsedTable[]): ParsedTable {
+  if (tables.length === 1) return tables[0]
+  const headers: string[] = []
+  for (const t of tables) for (const h of t.headers) if (!headers.includes(h)) headers.push(h)
+  const isId = (h: string) => {
+    const role = metaRole(h)
+    return role === 'subject' || role === 'group' || role === 'sex' || role === 'time' || role === 'run' || role === 'trial'
+  }
+  const idHeaders = headers.filter(isId)
+  const rows = new Map<string, Cell[]>()
+  for (const t of tables) {
+    for (const r of t.rows) {
+      const get = (h: string) => (t.headers.includes(h) ? r[t.headers.indexOf(h)] : null)
+      const key = idHeaders.map((h) => norm(get(h))).join('\u0000')
+      const row = rows.get(key) ?? new Array<Cell>(headers.length).fill(null)
+      headers.forEach((h, i) => {
+        const v = get(h)
+        if (v !== null) row[i] = v
+      })
+      rows.set(key, row)
+    }
+  }
+  return { file: tables[0].file, sheet: '', headerRow: 0, headers, rows: [...rows.values()] }
 }
 
 const norm = (c: Cell) => (c === null ? '' : String(c).trim().toLowerCase().replace(/\s+/g, ' '))
@@ -296,6 +350,10 @@ export function mergeTables(tables: ParsedTable[]): Dataset {
       if (prev !== undefined) {
         keep[prev] = false
         replaced++
+        // Values the newer row lacks (e.g. a measure only in the older file) are kept.
+        rows[prev].forEach((c, j) => {
+          if (r[j] === null) r[j] = c
+        })
       }
       seen.set(id, i)
     })

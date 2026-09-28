@@ -1,7 +1,38 @@
 # Changelog
 
-All notable changes to Gait Lab (CatWalk Analyzer) are recorded here.
+All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
+
+## [2.0.0] - 2026-09-28
+
+### Added
+
+- **Three programs in one app.** Click the name and icon at the top left (where "Gait Lab" was) to switch between:
+  - **Gait Lab**: CatWalk XT gait analysis, unchanged.
+  - **Rotarod Lab**: latency to fall, rod speed at fall, distance and passive rotations. Trials are averaged per animal and day. Best, first and last trial and the first-to-last improvement are worked out for every animal. Patterns flagged: impaired coordination and balance, reduced motor learning, gripping instead of walking, and longer-than-control latencies.
+  - **Open Field Lab**: distance, velocity, time moving and immobile, centre time, entries and latency, periphery time, rearing, grooming, stereotypy and fecal boli. EthoVision XT column names are recognised. Patterns flagged: hypoactivity, hyperactivity, anxiety-like centre avoidance, reduced centre avoidance, and repetitive behaviour.
+  - The last program used is remembered.
+- **Per-program experiments.** Saved experiments belong to the program they were made in. The start screen lists them and notes how many are saved in the other programs. Backups carry the program too.
+- **Learning curves tab (rotarod).** It plots group mean ± SEM for every trial of every day. The Prism export adds "by trial" grouped tables for repeated-measures two-way ANOVA or mixed-effects models.
+- **Prism and Excel import for every program.**
+  - **Prism 10 projects (.prism):**
+    - Each data table's title becomes the measure name.
+    - Age or time windows in the title (e.g. "51–100 days", "P30") become timepoints.
+    - Data-set titles become groups, with sex and "n=" read from them (e.g. "A477T Affected Males n=19").
+    - Replicate subcolumns become trials.
+    - Master sheets that repeat the age-binned data ("Males", "Females", "all ages") are skipped, with a note.
+  - **Prism-style spreadsheets:** one column per group, or blocks of replicate subcolumns, with one row per animal.
+  - **Long tables:** a measure column plus a value column.
+  - **Wide trial tables:** columns such as "Trial 1", "Day 2 Trial 3" or "0–5 min".
+  - **Layout setting:** "Prism tables" on the start screen and in Add data. Choose whether rows are animals or trials/time bins.
+- Rotarod and Open Field tutorials under Learn, with references verified in PubMed: Deacon 2013; Rustay, Wahlsten & Crabbe 2003 (×2); Seibenhener & Wooten 2015; Prut & Belzung 2003.
+- Demo data for each program.
+
+### Changed
+
+- The app is now called **Behavior Lab**; Gait Lab is its CatWalk program. Wording ("runs"/"trials"), export file names, the Prism project info and the written summary follow the active program.
+- CatWalk-only views are hidden in the other programs: Speed check, speed adjustment, compliance and per-paw views.
+- When a newly added file repeats rows already in the experiment, values missing from the new file are now kept from the earlier copy instead of being blanked.
 
 ## [1.5.0] - 2026-09-28
 
