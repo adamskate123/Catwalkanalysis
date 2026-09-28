@@ -68,7 +68,7 @@ export function StoryTab(props: TabProps) {
   const refs = refinements(ds, measures, agg, tr, cfg, opt)
   const activeRefs = refs.filter((r) => r.active)
   // Warnings not covered by a switch are listed as notes.
-  const covered = /speed variation|Walking speed differs|Sex is not balanced|Groups differ in age|fewer than 3/
+  const covered = /speed variation|Walking speed differs|Body weight differs|Sex is not balanced|Groups differ in age|fewer than 3/
   const notes = dataWarnings(agg, tr, cfg, ds)
     .filter((w) => w.level === 'warning' && !covered.test(w.text))
     .map((w) => w.text)

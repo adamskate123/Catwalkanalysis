@@ -6,7 +6,9 @@ import { strToU8, zipSync } from 'fflate'
 import { program, setProgram } from '../programs'
 import { aggregate, analyse, autoConfig, buildMeasures } from './analysis'
 import { interpret } from './interpret'
-import { narrative } from './report'
+import { dataWarnings, narrative } from './report'
+import { refinements } from './refine'
+import { DEFAULT_INTERPRET } from './interpret'
 import { parseGroupTitle, readPrismProject, splitSheetTitle } from './importers'
 import { detectTable, mergeTables, pickTables, type Cell, type RawSheet } from './parse'
 
@@ -237,9 +239,10 @@ describe('Prism-style spreadsheets', () => {
 
 describe('titles', () => {
   it('parses group titles', () => {
-    expect(parseGroupTitle('A477T Affected Males n=19')).toEqual({ group: 'A477T Affected', sex: 'M' })
-    expect(parseGroupTitle('Jax_WT Females (n=7)')).toEqual({ group: 'Jax_WT', sex: 'F' })
-    expect(parseGroupTitle('Vehicle')).toEqual({ group: 'Vehicle', sex: null })
+    expect(parseGroupTitle('A477T Affected Males n=19')).toEqual({ group: 'A477T Affected', sex: 'M', zone: null })
+    expect(parseGroupTitle('Jax_WT Females (n=7)')).toEqual({ group: 'Jax_WT', sex: 'F', zone: null })
+    expect(parseGroupTitle('Male Jax WT Periphery n=10')).toEqual({ group: 'Jax WT', sex: 'M', zone: 'Periphery' })
+    expect(parseGroupTitle('Vehicle')).toEqual({ group: 'Vehicle', sex: null, zone: null })
   })
   it('splits age windows off sheet titles', () => {
     expect(splitSheetTitle('Latency 51-100 days')).toEqual({ measure: 'Latency', time: '51-100 days', sex: null })
@@ -382,5 +385,103 @@ describe('Prism 10 (.prism) projects', () => {
 
   it('rejects files that are not Prism projects', () => {
     expect(() => readPrismProject(strToU8('hello'), 'bad.prism')).toThrow(/could not open/)
+  })
+})
+
+// Layouts from real open field and body-weight Prism files (values synthetic).
+describe('open field Prism files and body weight', () => {
+  it('reads zones from group titles, sex-prefixed groups, "- combined" titles and skips interval sheets', () => {
+    setProgram('openfield')
+    const f = prismFile([
+      {
+        title: 'Total Center Time ≤50 days - combined',
+        groups: ['Jax WT Center n=2', 'A477T Affected Center n=1', 'Jax WT Periphery n=2', 'A477T Affected Periphery n=1'],
+        reps: 1,
+        csv: 'w1,100,,500,\nw2,120,,480,\na1,,60,,540\n,,55,,\n',
+      },
+      { title: 'Average Distance Periphery ≤50 days- combined', groups: ['Jax WT n=2', 'A477T Affected n=1'], reps: 1, csv: 'w1,900,\nw2,950,\na1,,700\n' },
+      { title: 'Resting time v interval ≤50 day', groups: ['Male Jax WT n=2 interval 1', 'Male Jax WT n=2 interval 2'], reps: 1, csv: 'w1,1,2\n' },
+    ])
+    const [raw] = readPrismProject(f, 'of.prism')
+    const notes = raw.notes!.join('\n')
+    expect(notes).toMatch(/skipped 1 within-session interval sheet/)
+    expect(notes).toMatch(/1 row has values but no animal ID \("Total Center Time ≤50 days - combined" row 4\)/)
+    const ds = mergeTables(pickTables([raw]))
+    expect(ds.headers).toEqual(['Animal', 'Group', 'Time point', 'Total Center Time', 'Total Periphery Time', 'Average Distance Periphery'])
+    const ids = buildMeasures(ds).map((m) => m.def.id)
+    expect(ids).toEqual(expect.arrayContaining(['center_time', 'periphery_time', 'periphery_distance']))
+    // The value without an animal ID is left out rather than becoming a phantom animal
+    expect(ds.rows.map((r) => r[0]).sort()).toEqual(['a1', 'w1', 'w2'])
+  })
+
+  it('splits sheet titles with combined sexes, spaced age ranges and dashes after the unit', () => {
+    expect(splitSheetTitle('Average Distance Periphery ≤50 days- combined')).toEqual({ measure: 'Average Distance Periphery', time: '≤50 days', sex: null })
+    expect(splitSheetTitle('Total Average speed 301 - 350 days')).toEqual({ measure: 'Total Average speed', time: '301-350 days', sex: null })
+    expect(splitSheetTitle('Weights Males 50 Days')).toEqual({ measure: 'Weights', time: '50 days', sex: 'M' })
+    expect(splitSheetTitle('Weights Males all ages')).toEqual({ measure: 'Weights', time: null, sex: 'M' })
+  })
+
+  it('matches a sexes-combined file to the same animals in a sex-split file', () => {
+    setProgram('openfield')
+    const combined = readPrismProject(prismFile([{ title: 'Rearing ≤50 days - combined', groups: ['Jax WT n=2'], reps: 1, csv: 'w1,40\nw2,44\n' }]), 'a.prism')
+    const split = readPrismProject(
+      prismFile([{ title: 'Rearing ≤50 days', groups: ['Male Jax WT n=1', 'Female Jax WT n=1'], reps: 1, csv: 'w1,40,\nw2,,44\n' }]),
+      'b.prism',
+    )
+    const ds = mergeTables([...pickTables(combined), ...pickTables(split)])
+    const agg = aggregate(ds, buildMeasures(ds), autoConfig(ds))
+    expect(agg.subjects.map((s) => `${s.id}:${s.sex}`).sort()).toEqual(['w1:M', 'w2:F'])
+  })
+
+  const weights = () =>
+    readPrismProject(
+      prismFile([
+        { title: 'Weights Males 100 Days', groups: ['Jax WT males n=2', 'A477T Affected males n=2'], reps: 3, csv: 'w1,24,25,26,,,\nw2,26,27,28,,,\na1,,,,18,19,20\na2,,,,20,21,22\n' },
+        { title: 'Weights Males all ages', groups: ['Jax WT', 'A477T'], reps: 2, csv: '5,1,2,3,4\n' },
+      ]),
+      'weights.prism',
+    )
+
+  it('joins body weight by animal ID across different age binning and adjusts for it', () => {
+    setProgram('rotarod')
+    const rr = readPrismProject(
+      prismFile([{ title: 'Rotarod - Males 51-100 days', groups: ['Jax WT Males n=2', 'A477T Affected Males n=2'], reps: 1, csv: 'w1,60,\nw2,70,\na1,,50\na2,,58\n' }]),
+      'rr.prism',
+    )
+    const ds = mergeTables([...pickTables(rr), ...pickTables(weights())])
+    expect(ds.headers).toContain('Body weight (g)')
+    expect(ds.notices.join('\n')).toMatch(/added for 4 of 4 animal-timepoints.*“100 days” for “51-100 days”/)
+    const measures = buildMeasures(ds)
+    expect(measures.map((m) => m.def.id)).toEqual(expect.arrayContaining(['latency', 'body_weight']))
+    const cfg = autoConfig(ds)
+    const plain = aggregate(ds, measures, cfg)
+    const w1 = plain.subjects.find((s) => s.id === 'w1')!
+    expect(w1.weight).toBe(25)
+    expect(w1.values['body_weight|']).toBe(25)
+    // Pooled within-group slope: (WT 10 + A477T 8) / (2 + 2) = 4.5 s per g; mean weight of all animals 23 g
+    const adj = aggregate(ds, measures, { ...cfg, weightAdjust: true })
+    expect(adj.weightSlopes['latency|']).toBeCloseTo(4.5, 6)
+    expect(adj.subjects.find((s) => s.id === 'w1')!.values['latency|']).toBeCloseTo(60 - 4.5 * (25 - 23), 6)
+    expect(adj.subjects.find((s) => s.id === 'w1')!.values['body_weight|']).toBe(25)
+  })
+
+  it('offers "Adjust for body weight" when groups differ in weight', () => {
+    setProgram('rotarod')
+    const rows = (g: string, p: string, lat: number[], wt: number[]) => lat.map((l, i) => [`${p}${i}`, g, l, wt[i]])
+    const ds = mergeTables([
+      detectTable({
+        file: 'x.csv',
+        sheet: '',
+        cells: [['Animal', 'Group', 'Latency (s)', 'Body weight (g)'], ...rows('WT', 'w', [80, 82, 85, 79, 81, 84], [25, 26, 24, 25, 27, 26]), ...rows('A477T', 'a', [70, 72, 74, 69, 71, 73], [20, 19, 21, 20, 18, 19])],
+      })!,
+    ])
+    const cfg = autoConfig(ds)
+    const measures = buildMeasures(ds)
+    const agg = aggregate(ds, measures, cfg)
+    const tr = analyse(agg, measures, cfg)[0]
+    const r = refinements(ds, measures, agg, tr, cfg, DEFAULT_INTERPRET).find((x) => x.id === 'weight')!
+    expect(r.why).toMatch(/Body weight differs between A477T and WT/)
+    expect(r.options[0].apply(cfg).weightAdjust).toBe(true)
+    expect(dataWarnings(agg, tr, cfg, ds).some((w) => /Body weight differs/.test(w.text))).toBe(true)
   })
 })

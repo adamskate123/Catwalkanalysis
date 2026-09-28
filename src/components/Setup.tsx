@@ -28,6 +28,7 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
   const allCols = ds.headers
   const update = (patch: Partial<AnalysisConfig>) => setCfg({ ...cfg, ...patch })
   const hasSpeed = measures.some((m) => m.def.id === 'speed')
+  const hasWeight = measures.some((m) => m.def.id === 'body_weight')
   const groups = cfg.groupOrder
   const members = (g: string) => groupMembers(ds, cfg, g)
 
@@ -318,6 +319,18 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
               Also require FDR q &lt; α across all parameters <span className="muted">(stricter; recommended for exploratory screens of many parameters)</span>
             </span>
           </label>
+          {hasWeight && (
+            <label className="check">
+              <input type="checkbox" checked={Boolean(cfg.weightAdjust)} onChange={(e) => update({ weightAdjust: e.target.checked })} />
+              <span>
+                Adjust all parameters for body weight{' '}
+                <span className="muted">
+                  (removes the part of each parameter explained by body weight, using the regression slope pooled within groups, then re-centres at the mean weight of
+                  all animals at each timepoint; body weight itself is not adjusted, and animals without a weight are left out of adjusted parameters)
+                </span>
+              </span>
+            </label>
+          )}
           {prog.features.speed && <label className="check">
             <input type="checkbox" checked={cfg.speedAdjust} disabled={!hasSpeed} onChange={(e) => update({ speedAdjust: e.target.checked })} />
             <span>

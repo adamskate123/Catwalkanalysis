@@ -1,6 +1,6 @@
 import { program } from '../programs'
 import { getImportOptions } from './importers'
-import { isKeyTable, pickTables, readFile, type ParsedTable } from './parse'
+import { isKeyTable, isWeightTable, pickTables, readFile, type ParsedTable } from './parse'
 
 export interface LoadedFile {
   name: string
@@ -22,7 +22,12 @@ export async function readSpreadsheets(list: File[]): Promise<{ files: LoadedFil
       const tables = pickTables(sheets, opts)
       if (!tables.length || !tables.some((t) => t.rows.length)) throw new Error(`${f.name}: no data rows found.`)
       const isKey = tables.every(isKeyTable)
-      if (isKey)
+      if (tables.every(isWeightTable))
+        messages.push({
+          level: 'info',
+          text: `${f.name}: body weights. Loaded with ${program().test} data, each animal's weight is matched by ID (and age window) and can be used as a covariate; loaded on its own, body weight is analysed like any parameter.`,
+        })
+      else if (isKey)
         messages.push({
           level: 'info',
           text: `${f.name}: no ${program().test} parameters found, so it will be used as an animal key. Its columns (e.g. genotype, sex, age) are joined to the data through a matching ID column such as the animal or trial name.`,

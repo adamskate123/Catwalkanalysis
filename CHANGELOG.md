@@ -3,6 +3,35 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.3.0] - 2026-09-28
+
+Tested with real Prism 10 files: body weights, and open field data binned by age (one file with sexes combined, one split by sex).
+
+### Added
+
+- **Body weight as a parameter and a covariate (all programs).**
+  - A weights file (Excel or Prism) loaded with rotarod, open field or CatWalk data is matched to each animal by ear tag, age window and sex. Several weighings in one window are averaged.
+  - Files that bin ages differently still match: a weight at "100 days" is used for the "51–100 days" window.
+  - Body weight is analysed like any parameter, since weight loss can be part of the phenotype.
+- **Adjust for body weight** (Setup → Statistics, and a Story switch with preview).
+  - It is an ANCOVA-style adjustment. The slope of each parameter on weight is pooled within groups, and values are re-centred on the mean weight at each timepoint.
+  - The Story switch appears when groups differ in weight and states how much the main parameter changes per gram.
+  - A warning appears when groups differ in weight, and the written summary and Prism notes say when values were adjusted.
+- **Weight check tab.** It shows body weight by group and plots any parameter against weight per animal, with the within-group slope.
+- **Open field: zone-specific measures.** Resting time, speed and distance in the centre and in the periphery.
+  - The zone is read from Prism group titles, e.g. the "Jax WT Periphery" groups of a "Total Center Time" table become "Total Periphery Time".
+
+### Changed
+
+- A file with sexes combined and a file split by sex that describe the same animals are now combined. Sex keeps two rows apart only when both rows state different sexes.
+- Sheet titles:
+  - "- combined" / "Males and Females combined" are ignored when naming measures;
+  - age windows written "301 - 350 days", "50 Days" or "≤50 days-" are recognised and normalised;
+  - "… all ages" sheets are treated as repeats of the age-binned sheets.
+- Within-session interval sheets ("Resting time v interval …") are skipped with a note, since habituation isn't analysed yet.
+- Values in Prism rows without an animal ID are left out, with a note listing them, instead of becoming extra animals.
+- Open field summaries say "values" rather than "trials" when repeated values (e.g. two test dates) are averaged.
+
 ## [2.2.0] - 2026-09-28
 
 ### Added

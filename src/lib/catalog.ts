@@ -23,6 +23,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   coordination: 'Interlimb coordination',
   support: 'Support (paws on the glass)',
   positioning: 'Base of support & paw positioning',
+  body: 'Body weight',
   other: 'Other / unrecognised numeric columns',
 }
 
@@ -35,6 +36,7 @@ export const CATEGORY_ORDER: Category[] = [
   'positioning',
   'coordination',
   'support',
+  'body',
   'other',
 ]
 
@@ -54,6 +56,8 @@ export interface ParamDef {
   up?: string
   /** Paired-paw parameter (phase dispersion / couplings). */
   pairwise?: boolean
+  /** Position when listing parameters, if it should differ from the matching order. */
+  displayOrder?: number
 }
 
 // Order matters: more specific patterns first.
@@ -650,6 +654,25 @@ export const PARAMS: ParamDef[] = [
   },
 ]
 
+/**
+ * Body weight, shared by every program: analysed like any parameter (weight
+ * loss is itself a phenotype) and available as a covariate.
+ */
+export const BODY_WEIGHT: ParamDef = {
+  id: 'body_weight',
+  label: 'Body weight',
+  short: 'Weight',
+  unit: 'g',
+  category: 'body',
+  perPaw: false,
+  match: /^(body)?(weight|mass)s?(ing)?(g|grams?|kg)?$|^bw(g)?$|^bodyweight/,
+  description:
+    'Body weight at the test age (mean of the weighings in that age window). Lower weight can be a disease feature in itself, and weight affects rotarod latency, grip and paw-print size, so it can be used as a covariate (Setup → Statistics).',
+  down: 'Failure to thrive or weight loss: systemic disease, feeding difficulty, motor impairment or sickness.',
+  up: 'Heavier animals; on the rotarod heavier mice fall sooner regardless of coordination.',
+}
+PARAMS.push(BODY_WEIGHT)
+
 export const PARAM_BY_ID: Record<string, ParamDef> = Object.fromEntries(PARAMS.map((p) => [p.id, p]))
 
 export function otherParam(label: string): ParamDef {
@@ -838,7 +861,7 @@ const META_PATTERNS: [RegExp, MetaRole][] = [
   [/complian/i, 'compliant'],
   [/^(catwalk\s*)?trial(\s*(id|name|nr|no|number))?$/i, 'trial'],
   [/^(sex|gender)$/i, 'sex'],
-  [/^(experiment|file|source|date|comment|notes?|remarks?|status|label|detection|age|dob|birth|body\s*weight|weight)/i, 'other'],
+  [/^(experiment|file|source|date|comment|notes?|remarks?|status|label|detection|age|dob|birth)/i, 'other'],
 ]
 
 export function metaRole(name: string): MetaRole | null {

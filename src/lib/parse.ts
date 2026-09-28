@@ -295,8 +295,12 @@ const norm = (c: Cell) => (c === null ? '' : String(c).trim().toLowerCase().repl
 const isTrialLevel = (t: ParsedTable) => t.headers.some((h) => metaRole(h) === 'nruns')
 const isRunLevel = (t: ParsedTable) => t.headers.some((h) => metaRole(h) === 'run')
 
-export function mergeTables(tables: ParsedTable[]): Dataset {
+export function mergeTables(all: ParsedTable[]): Dataset {
   const notices: string[] = []
+  // Body-weight tables are joined onto the other data as a covariate when there are other data.
+  const weightOnly = all.filter(isWeightTable)
+  const weightTables = weightOnly.length < all.filter((t) => !isKeyTable(t) || isWeightTable(t)).length ? weightOnly : []
+  const tables = all.filter((t) => !weightTables.includes(t))
   let dataTables = tables.filter((t) => !isKeyTable(t))
   const keyTables = dataTables.length ? tables.filter(isKeyTable) : []
   // Run and trial statistics describe the same animals; combining them would count animals twice.
@@ -336,27 +340,37 @@ export function mergeTables(tables: ParsedTable[]): Dataset {
   }
 
   // Updated exports usually repeat earlier rows. A later row with the same
-  // experiment/animal/sex/trial/timepoint/session/run replaces the earlier one
-  // (sex is part of the identity because ear tags can repeat across sexes).
+  // experiment/animal/trial/timepoint/session/run replaces the earlier one. Sex
+  // only separates rows when both state it and it differs (ear tags can repeat
+  // across sexes), so a file without sex still matches the same animals in a
+  // file with sex.
   const idCols = headers
     .map((h, i) => ({ h, i, role: metaRole(h) }))
-    .filter(({ h, role }) => /^experiment$/i.test(h.trim()) || role === 'subject' || role === 'trial' || role === 'run' || role === 'sex' || (role === 'time' && !/description/i.test(h)))
+    .filter(({ h, role }) => /^experiment$/i.test(h.trim()) || role === 'subject' || role === 'trial' || role === 'run' || (role === 'time' && !/description/i.test(h)))
+  const sexCol = headers.findIndex((h) => metaRole(h) === 'sex')
   let replaced = 0
   if (idCols.some((c) => c.role === 'subject' || c.role === 'trial')) {
-    const seen = new Map<string, number>()
+    const seen = new Map<string, number[]>()
     const keep: boolean[] = rows.map(() => true)
     rows.forEach((r, i) => {
       const id = idCols.map(({ i: c }) => norm(r[c])).join('\u0000')
-      const prev = seen.get(id)
-      if (prev !== undefined) {
+      const sex = sexCol >= 0 ? norm(r[sexCol]) : ''
+      const list = seen.get(id) ?? []
+      const at = list.findIndex((p) => {
+        const other = sexCol >= 0 ? norm(rows[p][sexCol]) : ''
+        return !sex || !other || sex === other
+      })
+      if (at >= 0) {
+        const prev = list[at]
         keep[prev] = false
         replaced++
-        // Values the newer row lacks (e.g. a measure only in the older file) are kept.
+        // Values the newer row lacks (e.g. a measure only in the older file, or sex) are kept.
         rows[prev].forEach((c, j) => {
           if (r[j] === null) r[j] = c
         })
-      }
-      seen.set(id, i)
+        list[at] = i
+      } else list.push(i)
+      seen.set(id, list)
     })
     if (replaced) {
       const kept = rows.filter((_, i) => keep[i])
@@ -378,7 +392,118 @@ export function mergeTables(tables: ParsedTable[]): Dataset {
     headers.push(...j.info.added)
     rows.forEach((r, i) => r.push(...j.values[i]))
   }
+  if (weightTables.length) {
+    const w = joinWeights(headers, rows, weightTables)
+    if (w) {
+      headers.push(WEIGHT_COL)
+      rows.forEach((r, i) => r.push(w.values[i]))
+      notices.push(w.notice)
+    }
+  }
   return { headers, rows, columns: classifyColumns(headers, rows, keyCols), sources, keys, notices }
+}
+
+export const WEIGHT_COL = 'Body weight (g)'
+
+/** Numeric age window of a label: "≤50 days" → [0, 50], "51-100 days" → [51, 100], "100 days" → [100, 100]. */
+function ageWindow(label: string): [number, number] | null {
+  const t = label.toLowerCase()
+  let m = /(?:<=?|≤)\s*(\d+(?:\.\d+)?)/.exec(t)
+  if (m) return [0, +m[1]]
+  m = /(?:>=?|≥)\s*(\d+(?:\.\d+)?)/.exec(t)
+  if (m) return [+m[1], Infinity]
+  m = /(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/.exec(t)
+  if (m) return [+m[1], +m[2]]
+  m = /(\d+(?:\.\d+)?)/.exec(t)
+  return m ? [+m[1], +m[1]] : null
+}
+
+/** A point age matches the window that contains it; two windows match when identical. */
+function overlaps(a: [number, number], b: [number, number] | null): boolean {
+  if (!b) return false
+  const point = (x: [number, number]) => x[0] === x[1]
+  if (point(a) && point(b)) return a[0] === b[0]
+  if (point(b)) return b[0] >= a[0] && b[0] <= a[1]
+  if (point(a)) return a[0] >= b[0] && a[0] <= b[1]
+  return a[0] === b[0] && a[1] === b[1]
+}
+const isWeightName = (h: string) => !metaRole(h) && matchColumn(h)?.paramId === 'body_weight'
+
+/** A table whose only measurement is body weight (e.g. a weights Prism file), with an animal ID column. */
+export function isWeightTable(t: ParsedTable): boolean {
+  const measured = t.headers.filter((h) => !metaRole(h) && matchColumn(h))
+  return measured.length > 0 && measured.every(isWeightName) && t.headers.some((h) => metaRole(h) === 'subject')
+}
+
+/**
+ * Adds body weight to each data row from weight tables, matched by animal ID
+ * and, when both have one, by timepoint (and sex). Several weighings in the
+ * same window are averaged.
+ */
+function joinWeights(headers: string[], rows: Cell[][], tables: ParsedTable[]): { values: Cell[]; notice: string } | null {
+  const role = (hs: string[], r: MetaRole) => hs.findIndex((h) => metaRole(h) === r)
+  const di = role(headers, 'subject') >= 0 ? role(headers, 'subject') : role(headers, 'trial')
+  if (di < 0) return null
+  const dt = headers.findIndex((h) => metaRole(h) === 'time' && !/description/i.test(h))
+  const ds = role(headers, 'sex')
+  // Weighings per animal (and sex), then per time label
+  const byAnimal = new Map<string, { time: string; s: number; n: number }[]>()
+  let useTime = false
+  let useSex = false
+  for (const t of tables) {
+    const wi = t.headers.findIndex(isWeightName)
+    const ti = role(t.headers, 'subject')
+    const tt = t.headers.findIndex((h) => metaRole(h) === 'time')
+    const ts = role(t.headers, 'sex')
+    const byTime = dt >= 0 && tt >= 0
+    const bySex = ds >= 0 && ts >= 0
+    useTime ||= byTime
+    useSex ||= bySex
+    for (const r of t.rows) {
+      const v = toNumber(r[wi])
+      if (v === null || !norm(r[ti])) continue
+      const k = [norm(r[ti]), bySex ? norm(r[ts]) : ''].join('\u0000')
+      const time = byTime ? norm(r[tt]) : ''
+      const list = byAnimal.get(k) ?? []
+      const e = list.find((x) => x.time === time) ?? (list[list.push({ time, s: 0, n: 0 }) - 1])
+      e.s += v
+      e.n++
+      byAnimal.set(k, list)
+    }
+  }
+  if (!byAnimal.size) return null
+  const seen = new Set<string>()
+  const hit = new Set<string>()
+  let bridged = 0
+  const values = rows.map((r) => {
+    const time = useTime && dt >= 0 ? norm(r[dt]) : ''
+    const rowKey = [norm(r[di]), time, useSex && ds >= 0 ? norm(r[ds]) : ''].join('\u0000')
+    seen.add(rowKey)
+    // A row without sex takes the animal's weights whatever sex they were filed under.
+    const sex = useSex && ds >= 0 ? norm(r[ds]) : ''
+    const lists = sex || !useSex ? [byAnimal.get([norm(r[di]), sex].join('\u0000')) ?? []] : [...byAnimal].filter(([k]) => k.startsWith(norm(r[di]) + '\u0000')).map(([, l]) => l)
+    const entries = lists.flat()
+    if (!entries.length) return null
+    let use = entries.filter((e) => e.time === time)
+    if (!use.length && time) {
+      // Different binning in the two files, e.g. weight "100 days" within the "51-100 days" window
+      const win = ageWindow(time)
+      use = win ? entries.filter((e) => overlaps(win, ageWindow(e.time))) : []
+      if (use.length) bridged++
+    }
+    if (!use.length) return null
+    hit.add(rowKey)
+    const s = use.reduce((a, e) => a + e.s, 0)
+    const n = use.reduce((a, e) => a + e.n, 0)
+    return +(s / n).toFixed(3)
+  })
+  const matched = hit.size
+  const files = [...new Set(tables.map((t) => t.file))].join(', ')
+  const by = ['animal ID', useTime ? 'timepoint' : '', useSex ? 'sex' : ''].filter(Boolean).join(', ')
+  return {
+    values,
+    notice: `Body weight from ${files} was added for ${matched} of ${seen.size} animal${useTime ? '-timepoint' : ''}s, matched by ${by}; several weighings in one window are averaged.${bridged ? ' Where the two files bin ages differently, weights whose age falls inside the data’s age window were used (e.g. “100 days” for “51-100 days”).' : ''} Body weight appears as a parameter and can be used as a covariate (Setup → Statistics).`,
+  }
 }
 
 /** Combines several animal-key sheets (e.g. an original and an updated key) into one. */

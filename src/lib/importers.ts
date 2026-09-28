@@ -43,23 +43,38 @@ export function setImportOptions(o: ImportOptions) {
 // ---------------------------------------------------------------------------
 // Titles: groups ("A477T Affected Males n=19") and sheets ("Latency 51-100 days")
 
-export function parseGroupTitle(title: string): { group: string; sex: string | null } {
+const ZONE = /\b(center|centre|periphery|peripheral|border|inner|outer)\b/i
+
+/**
+ * Splits a Prism data-set title into group, sex and (open field) arena zone:
+ * "Male Jax WT Periphery n=10" → group "Jax WT", sex "M", zone "Periphery".
+ */
+export function parseGroupTitle(title: string): { group: string; sex: string | null; zone: string | null } {
   let t = title.replace(/[([]?\bn\s*=\s*\d+[)\]]?/gi, ' ')
   let sex: string | null = null
   if (/\b(females?|fem|f)\b/i.test(t)) sex = 'F'
   else if (/\b(males?|m)\b/i.test(t)) sex = 'M'
   if (sex) t = t.replace(/\b(females?|fem|males?|f|m)\b/gi, ' ')
+  const z = ZONE.exec(t)
+  const zone = z ? z[1][0].toUpperCase() + z[1].slice(1).toLowerCase() : null
+  if (z) t = t.replace(ZONE, ' ')
   const group = t.replace(/[\s,;:_\-–/()]+$/g, '').replace(/^[\s,;:_\-–/()]+/g, '').replace(/\s+/g, ' ').trim()
-  return { group: group || title.trim(), sex }
+  return { group: group || title.trim(), sex, zone }
+}
+
+/** "Total Center Time" for the Periphery groups of the same table → "Total Periphery Time". */
+function zonedMeasure(measure: string, zone: string | null): string {
+  if (!zone) return measure
+  return ZONE.test(measure) ? measure.replace(ZONE, zone) : `${measure} ${zone}`
 }
 
 const UNIT = '(?:d|days?|wks?|weeks?|mo|mos|months?|dpi|wpi)'
 const TIME_RE = new RegExp(
-  `(?:^|[\\s_(,;:-])((?:<=?|>=?|≤|≥)\\s*\\d+(?:\\.\\d+)?\\s*${UNIT}|\\d+(?:\\.\\d+)?\\s*(?:-|–|to)\\s*\\d+(?:\\.\\d+)?\\s*${UNIT}|(?:day|week|wk|month|p|pnd)\\s*-?\\s*\\d+|\\d+(?:\\.\\d+)?\\s*${UNIT}(?:\\s*old)?)(?=$|[\\s_),;:])`,
+  `(?:^|[\\s_(,;:-])((?:<=?|>=?|≤|≥)\\s*\\d+(?:\\.\\d+)?\\s*${UNIT}|\\d+(?:\\.\\d+)?\\s*(?:-|–|to)\\s*\\d+(?:\\.\\d+)?\\s*${UNIT}|(?:day|week|wk|month|p|pnd)\\s*-?\\s*\\d+|\\d+(?:\\.\\d+)?\\s*${UNIT}(?:\\s*old)?)(?=$|[\\s_),;:\\-–])`,
   'i',
 )
 
-const SEX_PAIR = /\b(males?\s*(?:vs\.?|versus|and|&|\+|\/)\s*females?|females?\s*(?:vs\.?|versus|and|&|\+|\/)\s*males?|both\s+sexes|m\s*(?:vs\.?|\/|\+)\s*f)\b/i
+const SEX_PAIR = /\b(males?\s*(?:vs\.?|versus|and|&|\+|\/)\s*females?(?:\s+combined)?|females?\s*(?:vs\.?|versus|and|&|\+|\/)\s*males?(?:\s+combined)?|both\s+sexes|sexes\s+combined|combined|m\s*(?:vs\.?|\/|\+)\s*f)\b/i
 
 /**
  * Splits a sheet title into the measure name, an age/time window and a sex, if
@@ -71,14 +86,19 @@ export function splitSheetTitle(title: string): { measure: string; time: string 
   let time: string | null = null
   const m = TIME_RE.exec(rest)
   if (m) {
-    time = m[1].replace(/\s+/g, ' ').trim()
+    // "301 - 350 Days" and "301-350 days" are the same window
+    time = m[1]
+      .replace(/\s*([-–]|to)\s*/g, '-')
+      .replace(/\s+/g, ' ')
+      .replace(/[a-z]+$/i, (u) => u.toLowerCase())
+      .trim()
     rest = rest.slice(0, m.index) + ' ' + rest.slice(m.index + m[0].length)
   }
   let sex: string | null = null
   if (SEX_PAIR.test(rest)) rest = rest.replace(SEX_PAIR, ' ')
   else if (/\bfemales?\b/i.test(rest)) sex = 'F'
   else if (/\bmales?\b/i.test(rest)) sex = 'M'
-  rest = rest.replace(/\b(fe)?males?\b/gi, ' ')
+  rest = rest.replace(/\b(fe)?males?\b/gi, ' ').replace(/\ball\s+ages\b/gi, ' ')
   const measure = rest
     .replace(/[()[\]]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -125,6 +145,8 @@ interface Context {
   /** Sex stated in the sheet title. */
   sex: string | null
   layout: 'animals' | 'trials'
+  /** Prism row numbers of the rows (1-based), used to name animals without an ID. */
+  rowNumbers?: number[]
 }
 
 const TRIAL_TITLE = /^(?:trial|t|run)\s*[-_#]?\s*(\d+)$/i
@@ -134,10 +156,18 @@ function blockRecords(blocks: Block[], rowLabels: (string | null)[], ctx: Contex
   const out: RecordRow[] = []
   // Prism row titles label the whole row. They identify an animal only when the
   // row holds values for a single group (one row per animal).
-  const groupsInRow = rowLabels.map((_, i) => blocks.filter((b) => b.values[i]?.some((v) => v !== null)).length)
+  // (Blocks of one group in different arena zones count as one group.)
+  const groupOf = (b: Block) => {
+    const p = parseGroupTitle(b.title)
+    return `${p.group}\u0000${p.sex ?? ''}`
+  }
+  const groupsInRow = rowLabels.map((_, i) => new Set(blocks.filter((b) => b.values[i]?.some((v) => v !== null)).map(groupOf)).size)
+  // When other rows have animal IDs, a value in a row without one can't be matched to an animal.
+  const labelledTable = rowLabels.some((l) => isText(l))
   for (const b of blocks) {
     const parsed = parseGroupTitle(b.title)
     const group = parsed.group
+    const measure = zonedMeasure(ctx.measure, parsed.zone)
     const sex = ctx.sex ?? parsed.sex
     const sexFromSheet = Boolean(ctx.sex)
     const tag = `${group}${sex ? ' ' + sex : ''}`
@@ -153,10 +183,11 @@ function blockRecords(blocks: Block[], rowLabels: (string | null)[], ctx: Contex
       const label = rowLabels[i]
       row.forEach((v, k) => {
         if (v === null) return
-        const base = { group, sex, sexFromSheet, time: ctx.time, measure: ctx.measure, value: v }
+        const base = { group, sex, sexFromSheet, time: ctx.time, measure, value: v }
         if (ctx.layout === 'animals') {
+          if (labelledTable && !label) return
           const labelled = isText(label) && groupsInRow[i] <= 1
-          const id = !label ? `${tag} #${i + 1}` : !isText(label) ? `${tag} #${label}` : groupsInRow[i] > 1 ? `${tag} ${label}` : label
+          const id = !label ? `${tag} #${ctx.rowNumbers?.[i] ?? i + 1}` : !isText(label) ? `${tag} #${label}` : groupsInRow[i] > 1 ? `${tag} ${label}` : label
           const axisKind: AxisKind | null = reps > 1 ? (subsAreTrials ? 'trial' : 'replicate') : null
           out.push({ ...base, animal: id, labelled, axis: axisKind ? (subsAreTrials ? (trialNo(k) ?? k + 1) : k + 1) : null, axisKind })
         } else {
@@ -299,6 +330,7 @@ export function readPrismProject(buf: Uint8Array, file: string, opts: ImportOpti
     sex: string | null
     blocks: Block[]
     rowLabels: (string | null)[]
+    rowNumbers: number[]
     xy: boolean
   }
   const sheets: SheetData[] = []
@@ -350,6 +382,7 @@ export function readPrismProject(buf: Uint8Array, file: string, opts: ImportOpti
       ...split,
       blocks,
       rowLabels: body.map((r) => (offset ? cell(r[0]) : null)),
+      rowNumbers: body.map((r) => grid.indexOf(r) + 1),
       xy: table.format === 'xy' || /xy/i.test(String(table['@class'] ?? '')),
     })
   }
@@ -366,6 +399,13 @@ export function readPrismProject(buf: Uint8Array, file: string, opts: ImportOpti
     notes.unshift(
       `${file}: skipped ${skipped.length} sheet${skipped.length === 1 ? '' : 's'} without an age or time window in the title (${skipped.map((s) => `"${s.title}"`).join(', ')}), because they repeat the values of the age-binned sheets.${skipped.some((s) => s.xy) ? ' (Per-animal XY sheets with exact ages are not used yet.)' : ''}`,
     )
+  // Within-session time-bin sheets ("Resting time v interval", groups "… interval 1…4") are not analysed yet.
+  const intervals = sheets.filter((s) => !skipped.includes(s) && (/\bv(s)?\.?\s+intervals?\b/i.test(s.title) || s.blocks.some((b) => /\binterval\s*\d+/i.test(b.title))))
+  if (intervals.length)
+    notes.push(
+      `${file}: skipped ${intervals.length} within-session interval sheet${intervals.length === 1 ? '' : 's'} (${intervals.map((s) => `"${s.title}"`).join(', ')}); habituation across intervals isn't analysed yet.`,
+    )
+  skipped.push(...intervals)
   // Sheets that state one sex come first, so their sex labels and values take precedence over pooled sheets.
   const used = sheets.filter((s) => !skipped.includes(s)).sort((a, b) => Number(!a.sex) - Number(!b.sex))
   const generic = used.filter((s) => !s.measure || GENERIC_SHEET.test(s.measure))
@@ -375,9 +415,21 @@ export function readPrismProject(buf: Uint8Array, file: string, opts: ImportOpti
     const layout: 'animals' | 'trials' = opts.prismLayout === 'animals' || opts.prismLayout === 'trials' ? opts.prismLayout : s.xy ? 'trials' : 'animals'
     if (layout === 'trials') anyTrials = true
     const measure = !s.measure || GENERIC_SHEET.test(s.measure) ? (generic.length > 1 && s.measure ? `${baseName(file)} (${s.measure})` : baseName(file)) : s.measure
-    records.push(...blockRecords(s.blocks, s.rowLabels, { measure, time: s.time, sex: s.sex, layout }))
+    records.push(...blockRecords(s.blocks, s.rowLabels, { measure, time: s.time, sex: s.sex, layout, rowNumbers: s.rowNumbers }))
   }
   if (!records.length) throw new Error(`${file}: the Prism data tables are empty.`)
+  // Rows with values but no animal ID in a table where other rows have IDs are usually a deleted or missing label.
+  const unlabelled: string[] = []
+  for (const s of used) {
+    if (s.xy || !s.rowLabels.some((l) => isText(l))) continue
+    s.rowLabels.forEach((l, i) => {
+      if (!l && s.blocks.some((b) => b.values[i]?.some((v) => v !== null))) unlabelled.push(`"${s.title}" row ${s.rowNumbers[i]}`)
+    })
+  }
+  if (unlabelled.length)
+    notes.push(
+      `${file}: ${unlabelled.length} row${unlabelled.length === 1 ? ' has' : 's have'} values but no animal ID (${unlabelled.slice(0, 4).join('; ')}${unlabelled.length > 4 ? '; …' : ''}). They were left out because they can't be matched to an animal; add the ear tag in Prism to include them.`,
+    )
   // Group titles often carry a hand-typed "n=" that goes stale as animals are added or removed.
   const stale: string[] = []
   for (const s of used) {

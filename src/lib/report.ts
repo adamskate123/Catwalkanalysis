@@ -103,6 +103,13 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
     return n > 0 && n < 5
   })
   if (small.length) w.push({ level: 'warning', text: `Small groups (n < 5): ${small.join(', ')}. Treat p-values with caution and focus on effect sizes.` })
+  const weight = tr.results.find((r) => r.measure.def.id === 'body_weight')
+  const weightDiff = weight?.comparisons.find((c) => c.reference === cfg.controlGroup && c.pAdj < 0.05)
+  if (weightDiff && !cfg.weightAdjust)
+    w.push({
+      level: 'warning',
+      text: `Body weight differs between ${weightDiff.group} and ${weightDiff.reference} (${weightDiff.diffPct > 0 ? '+' : ''}${weightDiff.diffPct.toFixed(0)}%, p = ${formatP(weightDiff.pAdj)}). ${program().id === 'rotarod' ? 'Heavier mice fall sooner from the rotarod, so part of a latency difference may reflect weight' : program().features.paws ? 'Print area, intensity and stride scale with body size' : 'Activity measures can depend on body size and condition'}; consider adjusting for body weight (Setup → Statistics).`,
+    })
   const speed = tr.results.find((r) => r.measure.def.id === 'speed')
   if (speed) {
     const c = speed.comparisons.find((c) => c.pAdj < 0.05)
@@ -139,7 +146,7 @@ const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 
 /** What one data row is: a run/trial, or just a value when rows are repeated measurements (e.g. Prism replicate subcolumns). */
 export function unitNoun(agg: AggregateResult): string {
-  return program().features.speed || agg.trials.length > 0 || !program().trialDerived ? program().runsNoun : 'values'
+  return program().features.speed || agg.trials.length > 0 ? program().runsNoun : 'values'
 }
 
 export function narrative(
@@ -158,7 +165,7 @@ export function narrative(
     .join(', ')
   const when = tr.time ? ` at ${tr.time}` : ''
   out.push(
-    `${subs.length} animals${when} were analysed: ${counts}. ${cfg.subjectCol ? `${cap(unitNoun(agg))} were averaged per animal (${formatNum(subs.reduce((s, x) => s + x.nRuns, 0) / Math.max(1, subs.length), 2)} ${unitNoun(agg)} per animal on average)` : 'Each row was treated as one animal'}${cfg.onlyCompliant && cfg.compliantCol ? ' and only compliant runs were used' : ''}${cfg.maxVariation !== null ? `; runs with more than ${cfg.maxVariation}% speed variation were excluded` : ''}${cfg.filters.length ? `; analysis restricted to ${cfg.filters.map((f) => `${f.col} = ${f.values.join(' or ')}`).join(', ')}` : ''}.${cfg.speedAdjust ? ' Values were adjusted to the mean walking speed using a pooled within-animal regression on speed.' : ''}`,
+    `${subs.length} animals${when} were analysed: ${counts}. ${cfg.subjectCol ? `${cap(unitNoun(agg))} were averaged per animal (${formatNum(subs.reduce((s, x) => s + x.nRuns, 0) / Math.max(1, subs.length), 2)} ${unitNoun(agg)} per animal on average)` : 'Each row was treated as one animal'}${cfg.onlyCompliant && cfg.compliantCol ? ' and only compliant runs were used' : ''}${cfg.maxVariation !== null ? `; runs with more than ${cfg.maxVariation}% speed variation were excluded` : ''}${cfg.filters.length ? `; analysis restricted to ${cfg.filters.map((f) => `${f.col} = ${f.values.join(' or ')}`).join(', ')}` : ''}.${cfg.speedAdjust ? ' Values were adjusted to the mean walking speed using a pooled within-animal regression on speed.' : ''}${cfg.weightAdjust && agg.subjects.some((s) => Number.isFinite(s.weight ?? NaN)) ? ` Values were adjusted to the mean body weight at each timepoint using a regression slope pooled within groups${agg.weightMissing ? `; ${agg.weightMissing} animal-timepoint(s) without a weight were left out of adjusted parameters` : ''}.` : ''}`,
   )
   const primaryRef = cfg.diseaseGroup ? `${cfg.diseaseGroup} vs ${cfg.controlGroup}` : `each group vs ${cfg.controlGroup ?? 'the reference group'}`
   const criteria = `p < ${opt.alpha}${opt.useFdr ? ', FDR q < ' + opt.alpha : ''}, |Hedges g| ≥ ${opt.minEffect}`
