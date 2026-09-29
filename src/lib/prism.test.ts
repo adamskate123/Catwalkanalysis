@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { aggregate, autoConfig, buildMeasures } from './analysis'
+import { aggregate, analyse, autoConfig, buildMeasures } from './analysis'
 import { demoSheet } from './demo'
 import { mergeTables, pickTables } from './parse'
-import { buildPrismTables, toPzfx } from './prism'
+import { buildPrismTables, buildStatsTables, describeStatistics, toPzfx } from './prism'
 
 const ds = mergeTables(pickTables([demoSheet()]))
 const measures = buildMeasures(ds)
@@ -53,6 +53,35 @@ describe('Prism export', () => {
     // Title uniqueness
     const titles = tables.map((t) => t.title)
     expect(new Set(titles).size).toBe(titles.length)
+  })
+
+  it("carries the app's statistics unchanged as one table per timepoint", () => {
+    const results = analyse(agg, measures, cfg)
+    const tables = buildStatsTables(results, agg.groups, key)
+    expect(tables.map((t) => t.title)).toEqual(['Statistics · 4 wk', 'Statistics · 8 wk', 'Statistics · 12 wk'])
+    const t = tables[1]
+    expect(t.rowTitles).toEqual(key.map((m) => m.label))
+    const r = results[1].results.find((x) => x.measure.key === key[0].key)!
+    const cmp = r.comparisons.find((c) => c.group === 'Model + Vehicle' && c.reference === 'WT')!
+    const cell = (title: string) => t.columns.find((c) => c.title === title)!.subcolumns[0][0]
+    expect(cell('WT n')).toBe(r.groups.WT.n)
+    expect(cell('WT mean')).toBe(r.groups.WT.mean)
+    expect(cell('Model + Vehicle SEM')).toBe(r.groups['Model + Vehicle'].sem)
+    expect(cell('Model + Vehicle vs WT: Hedges g')).toBe(cmp.g)
+    expect(cell('Model + Vehicle vs WT: p')).toBe(cmp.test.p)
+    expect(cell('Model + Vehicle vs WT: p (Holm)')).toBe(cmp.pAdj)
+    expect(cell('Model + Vehicle vs WT: Welch t statistic')).toBe(cmp.test.statistic)
+    expect(cell('Model + Vehicle vs WT: df')).toBe(cmp.test.df)
+    expect(cell('FDR q (BH)')).toBe(r.q)
+    expect(cell('Omnibus p')).toBe(r.omnibus!.p)
+    // Treated vs untreated disease comparisons are included too
+    expect(t.columns.some((c) => c.title === 'Model + AAV vs Model + Vehicle: Hedges g')).toBe(true)
+    const xml = toPzfx(tables, { appVersion: 'x' })
+    expect(xml).toContain('<Title>Model + Vehicle vs WT: Hedges g</Title>')
+    const text = describeStatistics(results, cfg)
+    expect(text).toContain("Welch's t-test")
+    expect(text).toContain('Holm')
+    expect(text).toContain('Benjamini-Hochberg')
   })
 })
 

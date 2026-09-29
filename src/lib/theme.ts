@@ -33,6 +33,9 @@ const LIGHT: ChartTheme = {
   divMid: '#f0efec',
 }
 
+/** Exports of many graphs at once use the light theme (white-ish background for papers and Prism). */
+export const LIGHT_THEME = LIGHT
+
 const DARK: ChartTheme = {
   mode: 'dark',
   surface: '#1a1a19',

@@ -518,11 +518,14 @@ describe('open field habituation across intervals', () => {
 
   it('reads a time-bin column in a long table as intervals', () => {
     setProgram('openfield')
-    const cells = [['Animal', 'Group', 'Bin', 'Distance moved (cm)']]
+    const cells = [['Animal', 'Group', 'Bin', 'Distance moved (cm)', 'Body weight (g)']]
     for (const [id, g, vals] of [['a1', 'WT', [900, 600, 450]], ['a2', 'WT', [1000, 700, 500]], ['b1', 'KO', [900, 880, 870]]] as const)
-      vals.forEach((v, i) => cells.push([id, g, `${i * 5}-${i * 5 + 5} min`, String(v)]))
+      vals.forEach((v, i) => cells.push([id, g, `${i * 5}-${i * 5 + 5} min`, String(v), String(20 + v / 100)]))
     const ds = mergeTables([detectTable({ file: 'bins.csv', sheet: '', cells })!])
     const measures = buildMeasures(ds)
+    // Body weight repeats on every row but is not a within-session measure
+    expect(measures.some((m) => m.def.id === 'body_weight')).toBe(true)
+    expect(measures.some((m) => m.def.id.startsWith('body_weight:'))).toBe(false)
     const change = measures.find((m) => m.def.id === 'distance:change')!
     const agg = aggregate(ds, measures, autoConfig(ds))
     expect(agg.subjects.find((s) => s.id === 'a1')!.values[change.key]).toBeCloseTo(-50, 6)
