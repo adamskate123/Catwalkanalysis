@@ -3,6 +3,28 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] - 2026-09-29
+
+Tested with the real open field Prism file that holds within-session interval sheets.
+
+### Added
+
+- **Cage Hang Lab**, a fourth program for the inverted cage-lid / grid hang test.
+  - It reads hang time (latency to fall) per trial from Excel, CSV or Prism, and computes best, first and last trial and the change from first to last trial for each animal.
+  - With body weights loaded it computes **holding impulse** (weight × hang time, g·s), which is not adjusted for weight again.
+  - Phenotype patterns: reduced grip strength and endurance, and fatigue across trials. A **Trials** tab, a tutorial, demo data and references (Deacon 2013; Aartsma-Rus & van Putten 2014) are included.
+  - A warning appears when many values sit at the cut-off (as for rotarod latency).
+- **Open field: habituation across intervals.**
+  - Prism sheets such as "Average Distance vs interval ≤50 day" (groups "Male Jax WT n=3 interval 1…4") are now read as values per interval instead of being skipped. EthoVision time-bin columns are read the same way.
+  - A **Habituation** tab plots each group across the intervals of the session.
+  - For distance, speed, moving and immobile time, the first interval, last interval and % change first → last are new per-animal parameters, with a "reduced habituation" pattern.
+
+### Changed
+
+- Sheet titles ending in "day"/"week"/"month" and "days"/"weeks"/"months" now give the same timepoint.
+- Line charts no longer overlap the last x-axis label with the one before it on narrow screens.
+- The "fewer than 3 trials" advice applies only to programs that analyse trials.
+
 ## [2.3.0] - 2026-09-28
 
 Tested with real Prism 10 files: body weights, and open field data binned by age (one file with sexes combined, one split by sex).

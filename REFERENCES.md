@@ -40,12 +40,22 @@ The phenotype patterns are the app’s own summaries of this literature. They gr
 
 ## Open field (Open Field Lab)
 
-*Used for:* Tutorial content, the activity and centre/periphery measures, and the anxiety-like and activity patterns.
+*Used for:* Tutorial content, the activity and centre/periphery measures, within-session habituation, and the anxiety-like, activity and habituation patterns.
 
 *Verified in PubMed.*
 
 1. Seibenhener ML, Wooten MC. Use of the Open Field Maze to measure locomotor and anxiety-like behavior in mice. J Vis Exp. 2015;(96):e52434. [doi:10.3791/52434](https://doi.org/10.3791/52434)
 2. Prut L, Belzung C. The open field as a paradigm to measure the effects of drugs on anxiety-like behaviors: a review. Eur J Pharmacol. 2003;463(1-3):3-33. [doi:10.1016/s0014-2999(03)01272-x](https://doi.org/10.1016/s0014-2999(03)01272-x)
+3. Bolivar VJ. Intrasession and intersession habituation in mice: from inbred strain variability to linkage analysis. Neurobiol Learn Mem. 2009;92(2):206-14. [doi:10.1016/j.nlm.2009.02.002](https://doi.org/10.1016/j.nlm.2009.02.002)
+
+## Cage hang (Cage Hang Lab)
+
+*Used for:* Tutorial content (inverted screen / cage-lid hanging, cut-offs, trials), the holding impulse (body weight × hang time) and the weakness and fatigue patterns.
+
+*Verified in PubMed.*
+
+1. Deacon RMJ. Measuring the strength of mice. J Vis Exp. 2013;(76):2610. [doi:10.3791/2610](https://doi.org/10.3791/2610)
+2. Aartsma-Rus A, van Putten M. Assessing functional performance in the mdx mouse model. J Vis Exp. 2014;(85):51303. [doi:10.3791/51303](https://doi.org/10.3791/51303)
 
 ## Statistical methods (all programs)
 

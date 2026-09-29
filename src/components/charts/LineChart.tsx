@@ -75,7 +75,7 @@ export function LineChart({ series, xs, theme, unit, height = 260, title, svgRef
         )}
         {xs.map((lab, i) =>
           // Skip labels that would overlap (the tooltip still names every point).
-          i % labelEvery === 0 || i === xs.length - 1 ? (
+          (i % labelEvery === 0 && (i === 0 || (xs.length - 1 - i) * step >= labelWidth)) || i === xs.length - 1 ? (
             <text key={lab} x={x(i)} y={m.t + ph + 18} textAnchor={xs.length > 1 && i === xs.length - 1 && m.r < labelWidth / 2 ? 'end' : 'middle'} fontSize={11} fill={theme.text2}>
               {lab}
             </text>

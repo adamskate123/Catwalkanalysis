@@ -146,7 +146,8 @@ export function refinements(ds: Dataset, measures: Measure[], agg: AggregateResu
   // 4. Too few runs per animal
   const fewRuns = agg.subjects.filter((s) => s.nRuns < MIN_RECOMMENDED_RUNS).length
   const runs = program().runsNoun
-  const repeated = program().features.speed || agg.trials.length > 0
+  // Minimum-trials advice applies to repeated trials of one test (runs, rotarod trials), not to intervals of a session.
+  const repeated = program().features.speed || (Boolean(program().trialDerived?.length) && agg.trials.length > 0)
   if (repeated && cfg.subjectCol && (cfg.minRuns >= MIN_RECOMMENDED_RUNS || fewRuns > 0)) {
     const active = cfg.minRuns >= MIN_RECOMMENDED_RUNS
     out.push({

@@ -1,24 +1,26 @@
-# Behavior Lab · Gait, Rotarod, Open Field
+# Behavior Lab · Gait, Rotarod, Open Field, Cage Hang
 
-**Version 2.3.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 2.4.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
-A web app that turns rodent behavioural data into structured graphs, statistics and a written phenotype summary, with a built-in tutorial for each test. It contains three programs; switch between them by clicking the name and icon at the top left:
+A web app that turns rodent behavioural data into structured graphs, statistics and a written phenotype summary, with a built-in tutorial for each test. It contains four programs; switch between them by clicking the name and icon at the top left:
 
 | Program | Test | Data it reads |
 | --- | --- | --- |
 | **Gait Lab** | CatWalk XT gait analysis | CatWalk XT run/trial statistics |
 | **Rotarod Lab** | Rotarod motor coordination and learning | SDI Rotor-Rod exports; Excel/CSV; Prism 10 `.prism` |
 | **Open Field Lab** | Open field activity and anxiety-like behaviour | EthoVision XT statistics exports; Excel/CSV; Prism 10 `.prism` |
+| **Cage Hang Lab** | Inverted cage-lid / grid hang (limb strength and endurance) | Excel/CSV; Prism 10 `.prism` |
 
 It runs in any modern browser on **phones, tablets and desktops**, and can be installed as an app (Add to Home Screen / Install app). It works offline once loaded. **All processing happens on your device; files are never uploaded.**
 
 ## Programs
 
 - **Rotarod Lab** recognises latency to fall, rod speed at fall, distance and passive rotations. It averages trials per animal and day, and computes best, first and last trial and the first-to-last improvement for each animal. A **Learning curves** tab plots every trial of every day. Prism export adds "by trial" grouped tables for repeated-measures analysis. It flags impaired coordination and balance, reduced motor learning, and gripping instead of walking.
-- **Open Field Lab** recognises distance, velocity, time moving and immobile, centre time, entries and latency, periphery time, rearing, grooming, stereotypy and fecal boli, including EthoVision's long column names (`In zone Center / Center-point Cumulative Duration s`). Time bins become timepoints, so habituation shows under Over time. It flags hypo- and hyperactivity, anxiety-like centre avoidance, reduced centre avoidance and repetitive behaviour.
+- **Open Field Lab** recognises distance, velocity, time moving and immobile, centre time, entries and latency, periphery time, rearing, grooming, stereotypy and fecal boli, including EthoVision's long column names (`In zone Center / Center-point Cumulative Duration s`). Within-session intervals (EthoVision time bins, or Prism sheets such as "Distance vs interval ≤50 days" with groups "… interval 1", "… interval 2") are read as intervals: a **Habituation** tab plots each group across the session, and the first interval, last interval and % change first → last are tested per animal. It flags hypo- and hyperactivity, anxiety-like centre avoidance, reduced centre avoidance and repetitive behaviour.
+- **Cage Hang Lab** recognises hang time (latency to fall), best, first and last trial, the change from first to last trial, number of falls and body weight. It computes **holding impulse** (body weight × hang time, g·s; Deacon 2013) when weights are present; holding impulse is not further adjusted for weight. A **Trials** tab plots every trial, and a warning appears when many values sit at the cut-off. It flags reduced grip strength and endurance, and fatigue across trials.
 - **Body weight** (all programs): load a weights file (Excel or Prism) with the behavioural data and each animal's weight is matched by ear tag, age window and sex. Weight is analysed as a parameter, shown in a **Weight check** tab, and can be used as a covariate (Setup → Statistics → Adjust for body weight; pooled within-group slope, ANCOVA-style).
 - **Combine groups** under Setup → Groups (e.g. several wild-type cohorts analysed as one control) and split them again; the Story tab offers this as a switch when several groups look like controls.
-- Everything below that is not specific to paws or walking speed applies to all three programs: Summary, Story, fingerprint, Parameters, Over time, filters, statistics, Prism export and saved experiments.
+- Everything below that is not specific to paws or walking speed applies to all four programs: Summary, Story, fingerprint, Parameters, Over time, filters, statistics, Prism export and saved experiments.
 
 ## Importing Prism and Excel tables
 

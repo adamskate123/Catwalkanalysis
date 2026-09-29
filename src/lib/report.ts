@@ -25,8 +25,9 @@ function describeCounts(m: Map<string, number>): string {
 
 /** Share of latency values at the maximum (a trial cut-off), when that share is large. */
 export function ceilingShare(ds: Dataset): { count: number; n: number; max: number } | null {
-  if (program().id !== 'rotarod') return null
-  const i = ds.columns.findIndex((c) => c.match?.paramId === 'latency')
+  const param = program().ceilingParam
+  if (!param) return null
+  const i = ds.columns.findIndex((c) => c.match?.paramId === param)
   if (i < 0) return null
   const vals = ds.rows.map((r) => toNumber(r[i])).filter((v): v is number => v !== null && Number.isFinite(v))
   if (vals.length < 20) return null
@@ -43,7 +44,7 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
     if (ceiling)
       w.push({
         level: 'warning',
-        text: `${ceiling.count} of ${ceiling.n} rotarod values (${Math.round((ceiling.count / ceiling.n) * 100)}%) sit exactly at ${+ceiling.max.toFixed(2)} s, which looks like the trial cut-off. Animals that reach the cut-off can't score higher, so differences among good performers are compressed and data are skewed. Consider the non-parametric tests (Setup → Statistics) and a longer maximum trial time or faster acceleration in future cohorts.`,
+        text: `${ceiling.count} of ${ceiling.n} ${program().test} values (${Math.round((ceiling.count / ceiling.n) * 100)}%) sit exactly at ${+ceiling.max.toFixed(2)} s, which looks like the trial cut-off. Animals that reach the cut-off can't score higher, so differences among good performers are compressed and data are skewed. Consider the non-parametric tests (Setup → Statistics) and a longer maximum trial time or faster acceleration in future cohorts.`,
       })
     // Acquisition settings must be constant for intensities and areas to be comparable.
     const varying = ds.columns.filter((c) => c.meta === 'equipment' && c.distinct > 1).map((c) => c.name)
@@ -121,7 +122,8 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
   } else if (program().features.speed) {
     w.push({ level: 'info', text: 'No average-speed column was found, so speed adjustment is unavailable.' })
   }
-  const repeated = program().features.speed || agg.trials.length > 0
+  // Minimum-trials advice applies to repeated trials of one test (runs, rotarod trials), not to intervals of a session.
+  const repeated = program().features.speed || (Boolean(program().trialDerived?.length) && agg.trials.length > 0)
   if (repeated && agg.subjects.some((s) => s.nRuns < 3) && cfg.subjectCol) {
     const k = agg.subjects.filter((s) => s.nRuns < 3).length
     w.push({

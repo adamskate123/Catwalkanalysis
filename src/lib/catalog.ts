@@ -58,6 +58,15 @@ export interface ParamDef {
   pairwise?: boolean
   /** Position when listing parameters, if it should differ from the matching order. */
   displayOrder?: number
+  /**
+   * Computed per animal from other parameters (e.g. holding impulse = weight × hang
+   * time). `needs` lists parameter ids that must be present; `get` returns an
+   * animal's value of a parameter id, or NaN.
+   */
+  compute?: (get: (paramId: string) => number) => number
+  needs?: string[]
+  /** Not adjusted when adjusting for body weight (it already includes weight). */
+  noWeightAdjust?: boolean
 }
 
 // Order matters: more specific patterns first.

@@ -263,6 +263,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   anxiety: 'Centre vs periphery (anxiety-like behaviour)',
   exploration: 'Exploration and other behaviours',
   body: 'Body weight',
+  habituation: 'Habituation within the session',
   other: 'Other / unrecognised numeric columns',
 }
 
@@ -350,6 +351,26 @@ const DOMAINS: Domain[] = [
     ],
   },
   {
+    id: 'of_habituation',
+    title: 'Reduced within-session habituation',
+    summary: 'Activity falls less (or resting rises less) from the first to the last interval than in controls.',
+    conditions:
+      'Hippocampal and prefrontal dysfunction, ADHD-, autism- and schizophrenia-related models, dopaminergic hyperfunction, and some models of intellectual disability.',
+    meaning:
+      'Healthy mice explore a novel arena and then slow down as it becomes familiar. A smaller decline suggests the animals do not habituate: impaired non-associative learning, persistent novelty-driven arousal, or hyperactivity. A group that is less active from the start can also show a smaller fall simply because it has less room to decline (floor effect), so read it with the first-interval values.',
+    followUp: [
+      'Compare first-interval values: a group that starts lower may show a floor effect rather than impaired habituation.',
+      'Test again on a second day for between-session habituation.',
+      'Novel object recognition or other memory tests if a learning deficit is suspected.',
+    ],
+    items: [
+      { param: 'distance:change', where: 'run', dir: 1 },
+      { param: 'velocity:change', where: 'run', dir: 1 },
+      { param: 'moving_time:change', where: 'run', dir: 1 },
+      { param: 'immobile_time:change', where: 'run', dir: -1 },
+    ],
+  },
+  {
     id: 'of_repetitive',
     title: 'Repetitive behaviour',
     summary: 'More self-grooming or stereotypic movements.',
@@ -373,12 +394,15 @@ function clean(name: string): string {
 }
 
 function matchColumn(name: string): ColumnMatch | null {
+  // Values per within-session interval ("Resting time per interval") are kept apart from session totals.
+  const perInterval = /\bper\s+(interval|bin|block)\b/i.test(name)
+  if (perInterval) name = name.replace(/\s*\bper\s+(interval|bin|block)\b/i, '')
   const pct = /%|percent|pct|proportion/i.test(name)
   const { rest, stat } = splitStat(clean(name).replace(/[\s_-]*(total|sum|cumulative\s*duration)\s*$/i, (m) => (/duration/i.test(m) ? ' duration' : '')))
   let key = normalizeKey(rest)
   if (!key) return null
   if (pct && !/pct|percent|proportion|fraction/.test(key)) key += 'percent'
-  for (const def of PARAMS) if (def.match.test(key)) return { paramId: def.id, stat: stat === 'r' ? 'mean' : stat }
+  for (const def of PARAMS) if (def.match.test(key)) return { paramId: def.id, stat: stat === 'r' ? 'mean' : stat, variant: perInterval ? 'per interval' : undefined }
   return null
 }
 
@@ -386,7 +410,8 @@ function metaRole(name: string): MetaRole | null | undefined {
   const n = name.trim().replace(/_/g, ' ')
   if (/^(arena|zone|chamber|box|tracking|video|recording|track)\b/i.test(n)) return 'other'
   // Time bins within a session (e.g. "0-5 min") behave like timepoints.
-  if (/^(time\s*)?bin|^interval|^block|^epoch|^minutes?$/i.test(n)) return 'time'
+  // Intervals / time bins within a session are ordered repeats (habituation), not timepoints.
+  if (/^(time\s*)?bin|^interval|^block|^epoch|^minutes?$/i.test(n)) return 'run'
   if (/^(trial|trial\s*name)$/i.test(n)) return 'trial'
   if (/^(trial\s*duration|duration\s*of\s*trial|arena\s*(size|diameter)|light|lux)/i.test(n)) return 'equipment'
   return undefined
@@ -472,7 +497,7 @@ export const openfield: ProgramDef = {
     'Load open field results exported from EthoVision XT, or Excel and Prism tables. Open Field Lab recognises activity and centre/periphery measures, compares groups and timepoints, and points out patterns of hypo- or hyperactivity and anxiety-like behaviour.',
   params: PARAMS,
   categoryLabels: CATEGORY_LABELS,
-  categoryOrder: ['locomotion', 'anxiety', 'exploration', 'body', 'other'],
+  categoryOrder: ['locomotion', 'anxiety', 'exploration', 'habituation', 'body', 'other'],
   matchColumn,
   metaRole,
   domains: DOMAINS,
@@ -482,6 +507,13 @@ export const openfield: ProgramDef = {
   demoFile: 'demo_openfield_ethovision.csv',
   keyMinParams: 1,
   rowAxis: 'Time bin',
+  trialColumn: 'Interval',
+  trialSummaries: true,
+  trialsTab: {
+    label: 'Habituation',
+    title: 'Habituation across intervals',
+    text: 'Group mean ± SEM for each interval of the session. Distance and speed normally fall, and resting time rises, as the arena becomes familiar (within-session habituation). A flatter curve than in controls suggests impaired habituation, often seen with hyperactivity or hippocampal dysfunction; a curve that is lower throughout suggests hypoactivity. The first, last and % change first → last interval are tested per animal in the Parameters tab.',
+  },
   primaryColumn: 'Distance moved (cm)',
   features: { speed: false, paws: false },
   filePrefix: 'openfield',

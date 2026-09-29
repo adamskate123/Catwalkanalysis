@@ -239,10 +239,10 @@ describe('Prism-style spreadsheets', () => {
 
 describe('titles', () => {
   it('parses group titles', () => {
-    expect(parseGroupTitle('A477T Affected Males n=19')).toEqual({ group: 'A477T Affected', sex: 'M', zone: null })
-    expect(parseGroupTitle('Jax_WT Females (n=7)')).toEqual({ group: 'Jax_WT', sex: 'F', zone: null })
-    expect(parseGroupTitle('Male Jax WT Periphery n=10')).toEqual({ group: 'Jax WT', sex: 'M', zone: 'Periphery' })
-    expect(parseGroupTitle('Vehicle')).toEqual({ group: 'Vehicle', sex: null, zone: null })
+    expect(parseGroupTitle('A477T Affected Males n=19')).toEqual({ group: 'A477T Affected', sex: 'M', zone: null, interval: null })
+    expect(parseGroupTitle('Jax_WT Females (n=7)')).toEqual({ group: 'Jax_WT', sex: 'F', zone: null, interval: null })
+    expect(parseGroupTitle('Male Jax WT Periphery n=10')).toEqual({ group: 'Jax WT', sex: 'M', zone: 'Periphery', interval: null })
+    expect(parseGroupTitle('Vehicle')).toEqual({ group: 'Vehicle', sex: null, zone: null, interval: null })
   })
   it('splits age windows off sheet titles', () => {
     expect(splitSheetTitle('Latency 51-100 days')).toEqual({ measure: 'Latency', time: '51-100 days', sex: null })
@@ -390,7 +390,7 @@ describe('Prism 10 (.prism) projects', () => {
 
 // Layouts from real open field and body-weight Prism files (values synthetic).
 describe('open field Prism files and body weight', () => {
-  it('reads zones from group titles, sex-prefixed groups, "- combined" titles and skips interval sheets', () => {
+  it('reads zones from group titles, sex-prefixed groups and "- combined" titles', () => {
     setProgram('openfield')
     const f = prismFile([
       {
@@ -404,14 +404,14 @@ describe('open field Prism files and body weight', () => {
     ])
     const [raw] = readPrismProject(f, 'of.prism')
     const notes = raw.notes!.join('\n')
-    expect(notes).toMatch(/skipped 1 within-session interval sheet/)
+    expect(notes).toMatch(/read 1 within-session interval sheet .*values per interval/)
     expect(notes).toMatch(/1 row has values but no animal ID \("Total Center Time ≤50 days - combined" row 4\)/)
     const ds = mergeTables(pickTables([raw]))
-    expect(ds.headers).toEqual(['Animal', 'Group', 'Time point', 'Total Center Time', 'Total Periphery Time', 'Average Distance Periphery'])
+    expect(ds.headers).toEqual(['Animal', 'Group', 'Sex', 'Time point', 'Interval', 'Total Center Time', 'Total Periphery Time', 'Average Distance Periphery', 'Resting time per interval'])
     const ids = buildMeasures(ds).map((m) => m.def.id)
     expect(ids).toEqual(expect.arrayContaining(['center_time', 'periphery_time', 'periphery_distance']))
     // The value without an animal ID is left out rather than becoming a phantom animal
-    expect(ds.rows.map((r) => r[0]).sort()).toEqual(['a1', 'w1', 'w2'])
+    expect([...new Set(ds.rows.map((r) => r[0]))].sort()).toEqual(['a1', 'w1', 'w2'])
   })
 
   it('splits sheet titles with combined sexes, spaced age ranges and dashes after the unit', () => {
@@ -483,5 +483,84 @@ describe('open field Prism files and body weight', () => {
     expect(r.why).toMatch(/Body weight differs between A477T and WT/)
     expect(r.options[0].apply(cfg).weightAdjust).toBe(true)
     expect(dataWarnings(agg, tr, cfg, ds).some((w) => /Body weight differs/.test(w.text))).toBe(true)
+  })
+})
+
+describe('open field habituation across intervals', () => {
+  it('reads interval sheets and derives first, last and % change per animal', () => {
+    setProgram('openfield')
+    const f = prismFile([
+      {
+        title: 'Average Distance vs interval ≤50 day',
+        groups: ['Male Jax WT n=2 interval 1', 'Male Jax WT n=2 interval 2', 'Male KO n=1 interval 1', 'Male KO n=1 interval 2'],
+        reps: 2,
+        // w1 tested on both dates in interval 1 (values averaged); KO barely habituates
+        csv: 'w1,1000,1200,500,,,,,\nw2,900,,450,,,,,\nk1,,,,,800,,760,\n',
+      },
+      { title: 'Total Distance ≤50 days', groups: ['Male Jax WT n=2', 'Male KO n=1'], reps: 1, csv: 'w1,3000,\nw2,2800,\nk1,,3100\n' },
+    ])
+    const ds = mergeTables(pickTables(readPrismProject(f, 'of.prism')))
+    expect(ds.columns.find((c) => c.name === 'Interval')?.meta).toBe('run')
+    const measures = buildMeasures(ds)
+    const labels = measures.map((m) => m.label)
+    expect(labels).toEqual(expect.arrayContaining(['Total distance moved', 'Total distance moved per interval', 'Total distance moved, first interval', 'Total distance moved, change first → last interval']))
+    const cfg = autoConfig(ds)
+    const agg = aggregate(ds, measures, cfg)
+    const key = (label: string) => measures.find((m) => m.label === label)!.key
+    const w1 = agg.subjects.find((s) => s.id === 'w1')!
+    expect(w1.values[key('Total distance moved')]).toBe(3000)
+    expect(w1.values[key('Total distance moved, first interval')]).toBe(1100)
+    expect(w1.values[key('Total distance moved, change first → last interval')]).toBeCloseTo(((500 - 1100) / 1100) * 100, 6)
+    expect(agg.subjects.find((s) => s.id === 'k1')!.values[key('Total distance moved, change first → last interval')]).toBeCloseTo(-5, 6)
+    // Habituation curves: one point per interval
+    expect(new Set(agg.trials.map((t) => t.trial))).toEqual(new Set(['1', '2']))
+  })
+
+  it('reads a time-bin column in a long table as intervals', () => {
+    setProgram('openfield')
+    const cells = [['Animal', 'Group', 'Bin', 'Distance moved (cm)']]
+    for (const [id, g, vals] of [['a1', 'WT', [900, 600, 450]], ['a2', 'WT', [1000, 700, 500]], ['b1', 'KO', [900, 880, 870]]] as const)
+      vals.forEach((v, i) => cells.push([id, g, `${i * 5}-${i * 5 + 5} min`, String(v)]))
+    const ds = mergeTables([detectTable({ file: 'bins.csv', sheet: '', cells })!])
+    const measures = buildMeasures(ds)
+    const change = measures.find((m) => m.def.id === 'distance:change')!
+    const agg = aggregate(ds, measures, autoConfig(ds))
+    expect(agg.subjects.find((s) => s.id === 'a1')!.values[change.key]).toBeCloseTo(-50, 6)
+    expect(agg.subjects.find((s) => s.id === 'b1')!.values[change.key]).toBeCloseTo((-30 / 900) * 100, 6)
+  })
+})
+
+describe('cage hang', () => {
+  it.each([
+    ['Hang time (s)', 'hang_latency'],
+    ['Cage hang', 'hang_latency'],
+    ['Latency to fall', 'hang_latency'],
+    ['Best hang time', 'hang_best'],
+    ['Holding impulse', 'holding_impulse'],
+    ['Falls', 'falls'],
+    ['Body weight (g)', 'body_weight'],
+  ])('%s → %s', (name, id) => {
+    setProgram('cagehang')
+    expect(program().matchColumn(name)?.paramId).toBe(id)
+  })
+
+  it('analyses the demo: best/first/last trial, holding impulse and weakness pattern', () => {
+    setProgram('cagehang')
+    const ds = load([program().demo()])
+    const cfg = autoConfig(ds)
+    expect(cfg.timeCol).toBe('Age')
+    expect(cfg.controlGroup).toBe('WT')
+    const measures = buildMeasures(ds)
+    expect(measures.map((m) => m.def.id)).toEqual(expect.arrayContaining(['hang_latency', 'hang_best', 'hang_first', 'hang_last', 'hang_improvement', 'holding_impulse', 'body_weight']))
+    const agg = aggregate(ds, measures, cfg)
+    const s = agg.subjects[0]
+    const best = s.values[measures.find((m) => m.def.id === 'hang_best')!.key]
+    expect(s.values['holding_impulse|']).toBeCloseTo((s.weight ?? NaN) * best, 6)
+    // Holding impulse already includes weight, so weight adjustment leaves it alone
+    const adj = aggregate(ds, measures, { ...cfg, weightAdjust: true })
+    expect(adj.weightSlopes['holding_impulse|']).toBeUndefined()
+    const tr = analyse(agg, measures, cfg).find((t) => t.time === '100 days')!
+    const found = interpret(tr, cfg).filter((f) => f.supporting.length).map((f) => f.domain.id)
+    expect(found).toContain('ch_weakness')
   })
 })

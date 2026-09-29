@@ -6,7 +6,7 @@ import type { ExperimentSummary } from '../lib/experiment'
 import { getImportOptions, setImportOptions, type PrismLayout } from '../lib/importers'
 import { isBackupFile, readSpreadsheets, type LoadedFile } from '../lib/readFiles'
 import { PROGRAMS, program } from '../programs'
-import { ArenaDiagram, RotarodDiagram, WalkwayDiagram } from './diagrams'
+import { ArenaDiagram, CageHangDiagram, RotarodDiagram, WalkwayDiagram } from './diagrams'
 
 interface Props {
   onLoaded: (files: LoadedFile[]) => void
@@ -32,6 +32,12 @@ const HERO: Record<string, { title: string; figure: () => ReactElement; caption:
     figure: RotarodDiagram,
     caption: 'Rotarod: mice walk on a rod that gradually speeds up; the time until each mouse falls measures coordination, balance and motor learning.',
     learn: 'How the rotarod works →',
+  },
+  cagehang: {
+    title: 'Turn cage hang times into graphs and a readable strength summary',
+    figure: CageHangDiagram,
+    caption: 'Cage hang: the mouse grips an inverted wire lid; the time until it falls measures grip strength and endurance, and weight × time gives the holding impulse.',
+    learn: 'How the cage hang test works →',
   },
   openfield: {
     title: 'Turn open field tracking into graphs and a readable activity summary',

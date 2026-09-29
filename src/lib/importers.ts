@@ -49,8 +49,12 @@ const ZONE = /\b(center|centre|periphery|peripheral|border|inner|outer)\b/i
  * Splits a Prism data-set title into group, sex and (open field) arena zone:
  * "Male Jax WT Periphery n=10" → group "Jax WT", sex "M", zone "Periphery".
  */
-export function parseGroupTitle(title: string): { group: string; sex: string | null; zone: string | null } {
+export function parseGroupTitle(title: string): { group: string; sex: string | null; zone: string | null; interval: number | null } {
   let t = title.replace(/[([]?\bn\s*=\s*\d+[)\]]?/gi, ' ')
+  // Within-session interval ("… interval 3"), used for habituation curves
+  const iv = /\b(?:interval|int|bin|block)\s*#?\s*(\d+)\b/i.exec(t)
+  const interval = iv ? Number(iv[1]) : null
+  if (iv) t = t.replace(iv[0], ' ')
   let sex: string | null = null
   if (/\b(females?|fem|f)\b/i.test(t)) sex = 'F'
   else if (/\b(males?|m)\b/i.test(t)) sex = 'M'
@@ -59,7 +63,7 @@ export function parseGroupTitle(title: string): { group: string; sex: string | n
   const zone = z ? z[1][0].toUpperCase() + z[1].slice(1).toLowerCase() : null
   if (z) t = t.replace(ZONE, ' ')
   const group = t.replace(/[\s,;:_\-–/()]+$/g, '').replace(/^[\s,;:_\-–/()]+/g, '').replace(/\s+/g, ' ').trim()
-  return { group: group || title.trim(), sex, zone }
+  return { group: group || title.trim(), sex, zone, interval }
 }
 
 /** "Total Center Time" for the Periphery groups of the same table → "Total Periphery Time". */
@@ -91,6 +95,8 @@ export function splitSheetTitle(title: string): { measure: string; time: string 
       .replace(/\s*([-–]|to)\s*/g, '-')
       .replace(/\s+/g, ' ')
       .replace(/[a-z]+$/i, (u) => u.toLowerCase())
+      // "≤50 day" on one sheet and "≤50 days" on another are the same window
+      .replace(/\b(day|week|month|year|wk|mo)$/, (u) => u + 's')
       .trim()
     rest = rest.slice(0, m.index) + ' ' + rest.slice(m.index + m[0].length)
   }
@@ -137,6 +143,8 @@ interface RecordRow {
   axisKind: AxisKind | null
   measure: string
   value: number
+  /** Index of the Prism table the value came from (repeats within one table are averaged). */
+  table: number
 }
 
 interface Context {
@@ -147,6 +155,8 @@ interface Context {
   layout: 'animals' | 'trials'
   /** Prism row numbers of the rows (1-based), used to name animals without an ID. */
   rowNumbers?: number[]
+  /** Index of the table, so repeats within it are averaged rather than treated as copies. */
+  table?: number
 }
 
 const TRIAL_TITLE = /^(?:trial|t|run)\s*[-_#]?\s*(\d+)$/i
@@ -183,11 +193,16 @@ function blockRecords(blocks: Block[], rowLabels: (string | null)[], ctx: Contex
       const label = rowLabels[i]
       row.forEach((v, k) => {
         if (v === null) return
-        const base = { group, sex, sexFromSheet, time: ctx.time, measure, value: v }
+        const base = { group, sex, sexFromSheet, time: ctx.time, measure, value: v, table: ctx.table ?? 0 }
         if (ctx.layout === 'animals') {
           if (labelledTable && !label) return
           const labelled = isText(label) && groupsInRow[i] <= 1
           const id = !label ? `${tag} #${ctx.rowNumbers?.[i] ?? i + 1}` : !isText(label) ? `${tag} #${label}` : groupsInRow[i] > 1 ? `${tag} ${label}` : label
+          // An interval in the group title is the ordered axis; its subcolumns are repeats to average.
+          if (parsed.interval !== null) {
+            out.push({ ...base, measure: intervalMeasure(measure), animal: id, labelled, axis: parsed.interval, axisKind: 'trial' })
+            return
+          }
           const axisKind: AxisKind | null = reps > 1 ? (subsAreTrials ? 'trial' : 'replicate') : null
           out.push({ ...base, animal: id, labelled, axis: axisKind ? (subsAreTrials ? (trialNo(k) ?? k + 1) : k + 1) : null, axisKind })
         } else {
@@ -204,7 +219,13 @@ function blockRecords(blocks: Block[], rowLabels: (string | null)[], ctx: Contex
 
 function axisColumn(kind: AxisKind): string {
   if (kind === 'row') return program().rowAxis
-  return kind === 'trial' ? 'Trial' : 'Replicate'
+  return kind === 'trial' ? (program().trialColumn ?? 'Trial') : 'Replicate'
+}
+
+/** "Resting time v interval" → "Resting time per interval" */
+function intervalMeasure(measure: string): string {
+  const base = measure.replace(/\s*\bv(s)?\.?\s+intervals?\b/i, '').replace(/\s*\bper\s+interval\b/i, '').trim()
+  return `${base} per interval`
 }
 
 /**
@@ -230,6 +251,7 @@ function recordsToSheet(records: RecordRow[], file: string, notes: string[]): Ra
   const byId = new Map<string, string[]>()
   let repeated = 0
   let conflicts = 0
+  const sums = new Map<string, { s: number; n: number; table: number }>()
   const groupConflicts = new Map<string, Set<string>>()
   for (const r of records) {
     const axisCol = r.axisKind ? axisColumn(r.axisKind) : null
@@ -267,8 +289,17 @@ function recordsToSheet(records: RecordRow[], file: string, notes: string[]): Ra
     }
     const mi = headers.length - measures.length + measures.indexOf(r.measure)
     const prev = row[mi]
-    if (prev === null) row[mi] = r.value
-    else {
+    const cell = `${key}\u0000${mi}`
+    const acc = sums.get(cell)
+    if (prev === null) {
+      row[mi] = r.value
+      sums.set(cell, { s: r.value, n: 1, table: r.table })
+    } else if (acc && acc.table === r.table) {
+      // Another value for the same animal and interval in the same table (e.g. a second test date): average
+      acc.s += r.value
+      acc.n++
+      row[mi] = +(acc.s / acc.n).toFixed(6)
+    } else {
       repeated++
       if (typeof prev === 'number' && Math.abs(prev - r.value) > 1e-9 * Math.max(1, Math.abs(prev))) conflicts++
     }
@@ -399,13 +430,12 @@ export function readPrismProject(buf: Uint8Array, file: string, opts: ImportOpti
     notes.unshift(
       `${file}: skipped ${skipped.length} sheet${skipped.length === 1 ? '' : 's'} without an age or time window in the title (${skipped.map((s) => `"${s.title}"`).join(', ')}), because they repeat the values of the age-binned sheets.${skipped.some((s) => s.xy) ? ' (Per-animal XY sheets with exact ages are not used yet.)' : ''}`,
     )
-  // Within-session time-bin sheets ("Resting time v interval", groups "… interval 1…4") are not analysed yet.
-  const intervals = sheets.filter((s) => !skipped.includes(s) && (/\bv(s)?\.?\s+intervals?\b/i.test(s.title) || s.blocks.some((b) => /\binterval\s*\d+/i.test(b.title))))
+  // Within-session interval sheets ("Resting time v interval", groups "… interval 1…4") give habituation curves.
+  const intervals = sheets.filter((s) => !skipped.includes(s) && s.blocks.some((b) => parseGroupTitle(b.title).interval !== null))
   if (intervals.length)
     notes.push(
-      `${file}: skipped ${intervals.length} within-session interval sheet${intervals.length === 1 ? '' : 's'} (${intervals.map((s) => `"${s.title}"`).join(', ')}); habituation across intervals isn't analysed yet.`,
+      `${file}: read ${intervals.length} within-session interval sheet${intervals.length === 1 ? '' : 's'} (${intervals.map((s) => `"${s.title}"`).join(', ')}) as values per ${(program().trialColumn ?? 'trial').toLowerCase()}, for habituation curves and first-to-last change.`,
     )
-  skipped.push(...intervals)
   // Sheets that state one sex come first, so their sex labels and values take precedence over pooled sheets.
   const used = sheets.filter((s) => !skipped.includes(s)).sort((a, b) => Number(!a.sex) - Number(!b.sex))
   const generic = used.filter((s) => !s.measure || GENERIC_SHEET.test(s.measure))
@@ -415,7 +445,7 @@ export function readPrismProject(buf: Uint8Array, file: string, opts: ImportOpti
     const layout: 'animals' | 'trials' = opts.prismLayout === 'animals' || opts.prismLayout === 'trials' ? opts.prismLayout : s.xy ? 'trials' : 'animals'
     if (layout === 'trials') anyTrials = true
     const measure = !s.measure || GENERIC_SHEET.test(s.measure) ? (generic.length > 1 && s.measure ? `${baseName(file)} (${s.measure})` : baseName(file)) : s.measure
-    records.push(...blockRecords(s.blocks, s.rowLabels, { measure, time: s.time, sex: s.sex, layout, rowNumbers: s.rowNumbers }))
+    records.push(...blockRecords(s.blocks, s.rowLabels, { measure, time: s.time, sex: s.sex, layout, rowNumbers: s.rowNumbers, table: sheets.indexOf(s) }))
   }
   if (!records.length) throw new Error(`${file}: the Prism data tables are empty.`)
   // Rows with values but no animal ID in a table where other rows have IDs are usually a deleted or missing label.
@@ -539,7 +569,7 @@ function meltWide(t: ParsedTable): ParsedTable | null {
   const hasDay = cols.some((c) => c.day !== null)
   const hasTrial = cols.some((c) => c.trial !== null)
   const hasBin = cols.some((c) => c.bin !== null)
-  const trialName = program().id === 'rotarod' ? 'Trial' : 'Replicate'
+  const trialName = program().trialDerived?.length ? (program().trialColumn ?? 'Trial') : 'Replicate'
   const headers = [...keep.map((i) => t.headers[i]), ...(hasDay ? ['Day'] : []), ...(hasTrial ? [trialName] : []), ...(hasBin ? ['Time bin'] : []), ...measures]
   const rows: Cell[][] = []
   for (const r of t.rows) {
