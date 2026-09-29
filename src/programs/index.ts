@@ -11,8 +11,9 @@ import type { RawSheet } from '../lib/parse'
 import { catwalk } from './catwalk'
 import { rotarod } from './rotarod'
 import { openfield } from './openfield'
+import { cagehang } from './cagehang'
 
-export type ProgramId = 'catwalk' | 'rotarod' | 'openfield'
+export type ProgramId = 'catwalk' | 'rotarod' | 'openfield' | 'cagehang'
 
 /** Per-animal values derived from the ordered trials of one session. */
 export interface TrialDerived {
@@ -20,7 +21,7 @@ export interface TrialDerived {
   id: string
   /** Source parameter id measured on every trial. */
   from: string
-  how: 'max' | 'first' | 'last' | 'improvement'
+  how: 'max' | 'first' | 'last' | 'improvement' | 'change_pct'
 }
 
 export interface ProgramDef {
@@ -44,6 +45,17 @@ export interface ProgramDef {
   runNoun: string
   runsNoun: string
   trialDerived?: TrialDerived[]
+  /**
+   * Derive first, last and % change first → last for every parameter measured
+   * over ordered trials or intervals (open field habituation).
+   */
+  trialSummaries?: boolean
+  /** Column name for ordered repeats within a session ("Trial", "Interval"). */
+  trialColumn?: string
+  /** Tab for per-trial curves: label and explanatory text. */
+  trialsTab?: { label: string; title: string; text: string }
+  /** Parameter whose values pile up at a trial cut-off (for the ceiling warning). */
+  ceilingParam?: string
   demo: () => RawSheet
   demoFile: string
   /** Steps shown on the start screen. */
@@ -60,7 +72,7 @@ export interface ProgramDef {
   filePrefix: string
 }
 
-export const PROGRAMS: ProgramDef[] = [catwalk, rotarod, openfield]
+export const PROGRAMS: ProgramDef[] = [catwalk, rotarod, openfield, cagehang]
 
 let active: ProgramDef = catwalk
 const byId: Record<string, Record<string, ParamDef>> = {}
@@ -82,6 +94,11 @@ export function getProgram(id: string | undefined): ProgramDef {
 export function paramById(id: string): ParamDef | undefined {
   const map = (byId[active.id] ??= Object.fromEntries(active.params.map((p) => [p.id, p])))
   return map[id]
+}
+
+/** Whether the active program derives per-animal summaries from ordered trials. */
+export function hasTrialAnalysis(p: ProgramDef = active): boolean {
+  return Boolean(p.trialDerived?.length || p.trialSummaries)
 }
 
 /** Metadata role of a column name under the active program. */

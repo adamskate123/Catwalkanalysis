@@ -14,6 +14,19 @@ export function Logo({ size = 26, program = 'catwalk' }: { size?: number; progra
           <path d="M20.8 26.8l-1-1.6-1.7.6" />
           <ellipse cx="16" cy="9" rx="4.2" ry="2.4" fill="#fff" stroke="none" />
         </g>
+      ) : program === 'cagehang' ? (
+        // A grid lid with a mouse hanging underneath
+        <g fill="#fff" stroke="#fff" strokeLinecap="round">
+          <line x1="6" y1="8" x2="26" y2="8" strokeWidth="2.2" />
+          {[8, 12, 16, 20, 24].map((x) => (
+            <line key={x} x1={x} y1="8" x2={x} y2="11" strokeWidth="1.4" />
+          ))}
+          <line x1="13" y1="11" x2="13" y2="15" strokeWidth="1.6" />
+          <line x1="19" y1="11" x2="19" y2="15" strokeWidth="1.6" />
+          <ellipse cx="16" cy="18" rx="5.5" ry="4" stroke="none" />
+          <circle cx="16" cy="23.5" r="2.4" stroke="none" />
+          <path d="M11 17c-3 1-4 4-4 7" fill="none" strokeWidth="1.4" />
+        </g>
       ) : program === 'openfield' ? (
         // An arena with a centre zone and a track
         <g fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round">

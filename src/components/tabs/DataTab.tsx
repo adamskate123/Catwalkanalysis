@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { program } from '../../programs'
+import { hasTrialAnalysis, program } from '../../programs'
 import { formatNum, type Measure } from '../../lib/analysis'
 import { animalCsv, download, statsCsv } from '../../lib/export'
 import { changedMeasures } from '../../lib/interpret'
@@ -13,7 +13,7 @@ type PrismScope = 'key' | 'significant' | 'all' | 'custom'
 export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps) {
   const [limit, setLimit] = useState(8)
   const prog = program()
-  const byTrial = Boolean(prog.trialDerived) && agg.trials.length > 0
+  const byTrial = hasTrialAnalysis(prog) && agg.trials.length > 0
   const multiTime = agg.times.length > 1 || byTrial
   const [scope, setScope] = useState<PrismScope>('key')
   const [layout, setLayout] = useState<PrismOptions['layout']>(multiTime ? 'both' : 'column')

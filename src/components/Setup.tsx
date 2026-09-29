@@ -368,7 +368,9 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
             ? 'Derived values (front/hind means and left–right asymmetry indices) are calculated per animal for every parameter measured on all four paws.'
             : prog.trialDerived
               ? `Best, first and last ${prog.runNoun} and the improvement from first to last are calculated per animal and timepoint when each row is one ${prog.runNoun}.`
-              : ''}
+              : prog.trialSummaries
+                ? `For values recorded per ${(prog.trialColumn ?? 'interval').toLowerCase()}, the first, last and % change from first to last are calculated per animal (habituation).`
+                : ''}
         </p>
       </div>
     </>

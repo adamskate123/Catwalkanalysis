@@ -371,3 +371,43 @@ export function ArenaDiagram() {
     </svg>
   )
 }
+
+export function CageHangDiagram() {
+  return (
+    <svg viewBox="0 0 420 210" role="img" aria-label="Schematic of the cage hang test: a wire cage lid is held upside down above soft bedding, a mouse hangs from the underside by all four paws, and a timer runs until it falls." fontFamily={FONT}>
+      {/* inverted wire lid */}
+      <rect x={70} y={40} width={280} height={10} rx={3} fill="none" stroke={T2} strokeWidth={2.5} />
+      {Array.from({ length: 23 }, (_, i) => (
+        <line key={i} x1={78 + i * 12} y1={40} x2={78 + i * 12} y2={50} stroke={T2} strokeWidth={1.4} />
+      ))}
+      {/* hanging mouse (belly up, paws on the wire) */}
+      <g fill={T} opacity={0.85}>
+        <ellipse cx={205} cy={72} rx={30} ry={13} />
+        <ellipse cx={236} cy={68} rx={10} ry={8} />
+        <path d="M176 72 C 160 80, 150 96, 140 102" stroke={T} strokeWidth={2.4} fill="none" strokeLinecap="round" />
+        {[186, 198, 214, 226].map((x) => (
+          <rect key={x} x={x - 2} y={50} width={4} height={14} rx={2} />
+        ))}
+      </g>
+      {/* bedding */}
+      <path d="M40 185 C 90 172, 140 190, 200 180 S 320 172, 380 184 L 380 196 L 40 196 Z" fill="#1baf7a" opacity={0.25} />
+      <path d="M205 92 v 60" stroke={M} strokeWidth={1.5} strokeDasharray="4 4" />
+      <path d="M199 146 l 6 8 l 6 -8" fill="none" stroke={M} strokeWidth={1.5} />
+      {/* timer */}
+      <g transform="translate(300 100)">
+        <circle cx={20} cy={20} r={18} fill="none" stroke={A} strokeWidth={2.5} />
+        <path d="M20 20 V 8 M20 20 L 29 26" stroke={A} strokeWidth={2.5} strokeLinecap="round" />
+        <rect x={15} y={-4} width={10} height={5} rx={1.5} fill={A} />
+      </g>
+      <text x={70} y={28} fontSize={11} fill={M}>
+        Inverted wire cage lid, ~30–40 cm above bedding
+      </text>
+      <text x={286} y={156} fontSize={11} fill={T2}>
+        Time to fall (s),
+      </text>
+      <text x={286} y={170} fontSize={11} fill={T2}>
+        up to the cut-off
+      </text>
+    </svg>
+  )
+}

@@ -16,7 +16,7 @@ import { SpeedTab } from './tabs/SpeedTab'
 import { DataTab } from './tabs/DataTab'
 import { TrialsTab } from './tabs/TrialsTab'
 import { WeightTab } from './tabs/WeightTab'
-import { program } from '../programs'
+import { hasTrialAnalysis, program } from '../programs'
 import type { TabProps } from './tabs/types'
 
 interface Props {
@@ -79,13 +79,13 @@ export function Results(props: Props) {
   const tabProps: TabProps = { ds, measures, cfg, setCfg, agg, results, theme, opt, time, colorOf, openMeasure, onLearn }
   const hasTime = results.length > 1
   const prog = program()
-  const hasTrials = Boolean(prog.trialDerived) && agg.trials.length > 0
+  const hasTrials = hasTrialAnalysis(prog) && agg.trials.length > 0
   const tabs: [Tab, string][] = [
     ['summary', 'Summary'],
     ['story', 'Story'],
     ['fingerprint', prog.features.paws ? 'Gait fingerprint' : 'Fingerprint'],
     ['explore', 'Parameters'],
-    ...(hasTrials ? ([['trials', 'Learning curves']] as [Tab, string][]) : []),
+    ...(hasTrials ? ([['trials', prog.trialsTab?.label ?? 'Trials']] as [Tab, string][]) : []),
     ...(hasTime ? ([['time', 'Over time']] as [Tab, string][]) : []),
     ...(prog.features.speed ? ([['speed', 'Speed check']] as [Tab, string][]) : []),
     ...(measures.some((m) => m.def.id === 'body_weight') ? ([['weight', 'Weight check']] as [Tab, string][]) : []),

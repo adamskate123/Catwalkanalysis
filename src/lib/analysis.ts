@@ -93,13 +93,41 @@ export function buildMeasures(ds: Dataset): Measure[] {
     }
   }
   // Per-animal summaries across trials (rotarod best/first/last trial), when rows are trials.
-  if (ds.columns.some(isTrialColumn)) {
+  const triali = ds.columns.findIndex(isTrialColumn)
+  if (triali >= 0) {
     for (const td of program().trialDerived ?? []) {
       const src = measures.find((m) => m.def.id === td.from && m.col !== undefined && !m.paw && !m.variant)
       const def = paramById(td.id)
       if (!src || !def || measures.some((m) => m.def.id === td.id)) continue
       measures.push({ key: `${td.id}|trials`, def, trial: { source: src.key, how: td.how }, stat: 'mean', label: def.label })
     }
+    // First, last and % change for every parameter measured across ordered intervals (habituation).
+    if (program().trialSummaries) {
+      const noun = (program().trialColumn ?? 'Trial').toLowerCase()
+      for (const src of measures.filter((m) => m.col !== undefined && !m.trial && ds.rows.some((r) => r[triali] !== null && r[m.col!] !== null))) {
+        const base = src.def
+        const name = src.label.replace(/ per (interval|trial|bin)$/i, '')
+        for (const [how, suffix, label, unit, description] of [
+          ['first', 'first', `${name}, first ${noun}`, base.unit, `${base.label} in the first ${noun} of the session.`],
+          ['last', 'last', `${name}, last ${noun}`, base.unit, `${base.label} in the last ${noun} of the session.`],
+          [
+            'change_pct',
+            'change',
+            `${name}, change first → last ${noun}`,
+            '%',
+            `Change in ${base.label.toLowerCase()} from the first to the last ${noun}, as % of the first. Activity measures normally fall across a session as the arena becomes familiar (habituation); a smaller fall than in controls suggests impaired habituation.`,
+          ],
+        ] as const) {
+          const def: ParamDef = { id: `${base.id}:${suffix}`, label, short: label, unit, category: 'habituation', perPaw: false, match: /$^/, description }
+          measures.push({ key: `${src.key}:${suffix}`, def, trial: { source: src.key, how }, stat: 'mean', label })
+        }
+      }
+    }
+  }
+  // Parameters computed from others per animal (e.g. holding impulse = body weight × hang time)
+  for (const def of program().params) {
+    if (!def.compute || measures.some((m) => m.def.id === def.id)) continue
+    if ((def.needs ?? []).every((id) => measures.some((m) => m.def.id === id))) measures.push({ key: `${def.id}|`, def, stat: 'mean', label: def.label })
   }
   return sortMeasures(measures)
 }
@@ -388,9 +416,9 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
   const nri = ds.columns.findIndex((c) => c.meta === 'nruns')
   const sexi = ds.columns.findIndex((c) => c.meta === 'sex')
   const agei = ds.columns.findIndex((c) => /^age\b/i.test(c.name) && c.numericShare > 0.8)
-  const runi = ds.columns.findIndex((c) => c.meta === 'run')
   // Replicate subcolumns (repeated measurements with no order) give no learning curve.
   const triali = ds.columns.findIndex(isTrialColumn)
+  const runi = triali >= 0 ? triali : ds.columns.findIndex((c) => c.meta === 'run')
   const filters = cfg.filters.map((f) => ({ i: colIndex(ds, f.col), values: new Set(f.values) })).filter((f) => f.i >= 0)
   const raw = measures.filter((m) => m.col !== undefined)
 
@@ -483,6 +511,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     })
     addDerived(values, measures)
     addTrialDerived(values, measures, raw, arr)
+    addComputed(values, measures, weightM ? mean(finite(arr.map((r) => r.weight))) : NaN)
     subjects.push({
       id: arr[0].subject,
       group: arr[0].group,
@@ -508,7 +537,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     const grand = new Map<string, number>()
     for (const t of new Set(subjects.map((s) => s.time))) grand.set(t, mean(finite(subjects.filter((s) => s.time === t).map(w))))
     for (const m of measures) {
-      if (m === weightM || m.def.id === 'body_weight') continue
+      if (m === weightM || m.def.id === 'body_weight' || m.def.noWeightAdjust) continue
       const slope = pooledWithinSlope(subjects.map((s) => ({ x: w(s), y: s.values[m.key], g: `${s.group}\u0000${s.time}` })))
       if (!Number.isFinite(slope)) continue
       weightSlopes[m.key] = slope
@@ -567,12 +596,21 @@ function runOrder(c: Cell, idx: number): number {
   return Number.isFinite(n) ? n * 1e6 + idx : 1e12 + idx
 }
 
-function addTrialDerived(values: Record<string, number>, measures: Measure[], raw: Measure[], rows: { v: number[]; order: number }[]) {
-  const sorted = [...rows].sort((a, b) => a.order - b.order)
+function addTrialDerived(values: Record<string, number>, measures: Measure[], raw: Measure[], rows: { v: number[]; order: number; trial: string }[]) {
+  // One value per trial/interval (repeats of the same one, e.g. two test dates, averaged), in order.
+  const byTrial = new Map<string, { order: number; rows: { v: number[] }[] }>()
+  for (const r of rows) {
+    const k = r.trial || `#${r.order}`
+    const e = byTrial.get(k) ?? { order: r.order, rows: [] }
+    e.order = Math.min(e.order, r.order)
+    e.rows.push(r)
+    byTrial.set(k, e)
+  }
+  const sorted = [...byTrial.entries()].filter(([k]) => !k.startsWith('#') || rows.every((r) => !r.trial)).sort((a, b) => a[1].order - b[1].order)
   for (const m of measures) {
     if (!m.trial) continue
     const j = raw.findIndex((x) => x.key === m.trial!.source)
-    const xs = j < 0 ? [] : finite(sorted.map((r) => r.v[j]))
+    const xs = j < 0 ? [] : finite(sorted.map(([, e]) => mean(finite(e.rows.map((r) => r.v[j])))))
     let out = NaN
     if (xs.length) {
       switch (m.trial.how) {
@@ -588,9 +626,24 @@ function addTrialDerived(values: Record<string, number>, measures: Measure[], ra
         case 'improvement':
           out = xs.length > 1 ? xs[xs.length - 1] - xs[0] : NaN
           break
+        case 'change_pct':
+          out = xs.length > 1 && xs[0] !== 0 ? ((xs[xs.length - 1] - xs[0]) / Math.abs(xs[0])) * 100 : NaN
+          break
       }
     }
     values[m.key] = out
+  }
+}
+
+function addComputed(values: Record<string, number>, measures: Measure[], weight: number) {
+  for (const m of measures) {
+    if (!m.def.compute) continue
+    const get = (id: string) => {
+      if (id === 'body_weight') return weight
+      const src = measures.find((x) => x.def.id === id && !x.def.compute)
+      return src ? (values[src.key] ?? NaN) : NaN
+    }
+    values[m.key] = m.def.compute(get)
   }
 }
 

@@ -16,9 +16,8 @@ export function TrialsTab(props: TabProps) {
   const m = perTrial.find((x) => x.key === key) ?? perTrial[0]
   if (!m) return <div className="card">No per-{prog.runNoun} values found. Load a file with one row per {prog.runNoun} and a {prog.runNoun} number column.</div>
 
-  const noun = prog.runNoun[0].toUpperCase() + prog.runNoun.slice(1)
+  const noun = prog.trialColumn ?? prog.runNoun[0].toUpperCase() + prog.runNoun.slice(1)
   const axis = trialAxis(agg, noun)
-  const multi = agg.times.length > 1
   const series: LineSeries[] = agg.groups.map((g) => {
     const ids = [...new Set(agg.trials.filter((r) => r.group === g).map((r) => r.id))]
     return {
@@ -35,7 +34,7 @@ export function TrialsTab(props: TabProps) {
     <>
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0 }}>Learning curves</h2>
+          <h2 style={{ margin: 0 }}>{prog.trialsTab?.title ?? 'Trials'}</h2>
           {perTrial.length > 1 && (
             <select value={m.key} onChange={(e) => setKey(e.target.value)} style={{ width: 'auto' }} aria-label="Parameter">
               {perTrial.map((x) => (
@@ -47,14 +46,11 @@ export function TrialsTab(props: TabProps) {
           )}
         </div>
         <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
-          Group mean ± SEM for every {prog.runNoun}
-          {multi ? ' of every session' : ''}. Healthy animals usually improve across {prog.runsNoun} and days; a flatter curve with a similar starting point suggests
-          impaired motor learning, while a curve that is lower throughout suggests a coordination or strength deficit. The Summary and Parameters tabs test best,
-          first and last {prog.runNoun} and improvement per animal. For a formal {prog.runNoun} × group test, download the Prism file (Data &amp; export → "by{' '}
-          {prog.runNoun}" grouped tables) and run a repeated-measures two-way ANOVA or mixed-effects model.
+          {prog.trialsTab?.text ?? `Group mean ± SEM for every ${prog.runNoun}.`} For a formal {prog.runNoun} × group test, download the Prism file (Data &amp; export →
+          grouped tables "by {(prog.trialColumn ?? prog.runNoun).toLowerCase()}") and run a repeated-measures two-way ANOVA or mixed-effects model.
         </p>
       </div>
-      <ChartCard title={`${m.label} by ${prog.runNoun}`} svg={ref} name={`${m.label}_by_${prog.runNoun}`}>
+      <ChartCard title={`${m.label.replace(/ per (interval|trial|bin)$/i, '')} by ${noun.toLowerCase()}`} svg={ref} name={`${m.label}_by_${noun.toLowerCase()}`}>
         <LineChart series={series} xs={axis.map((a) => a.label)} theme={theme} unit={m.def.unit} svgRef={ref} height={300} />
       </ChartCard>
     </>

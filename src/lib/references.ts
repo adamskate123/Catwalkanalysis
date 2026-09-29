@@ -63,6 +63,20 @@ export const OPENFIELD_REFS: Reference[] = [
     text: 'Prut L, Belzung C. The open field as a paradigm to measure the effects of drugs on anxiety-like behaviors: a review. Eur J Pharmacol. 2003;463(1-3):3-33.',
     doi: '10.1016/s0014-2999(03)01272-x',
   },
+  {
+    id: 'bolivar2009',
+    text: 'Bolivar VJ. Intrasession and intersession habituation in mice: from inbred strain variability to linkage analysis. Neurobiol Learn Mem. 2009;92(2):206-14.',
+    doi: '10.1016/j.nlm.2009.02.002',
+  },
+]
+
+export const CAGEHANG_REFS: Reference[] = [
+  { id: 'deacon2013strength', text: 'Deacon RMJ. Measuring the strength of mice. J Vis Exp. 2013;(76):2610.', doi: '10.3791/2610' },
+  {
+    id: 'aartsmarus2014',
+    text: 'Aartsma-Rus A, van Putten M. Assessing functional performance in the mdx mouse model. J Vis Exp. 2014;(85):51303.',
+    doi: '10.3791/51303',
+  },
 ]
 
 export const STATS_REFS: Reference[] = [
@@ -152,9 +166,16 @@ export const REFERENCE_GROUPS: ReferenceGroup[] = [
   {
     id: 'openfield',
     title: 'Open field (Open Field Lab)',
-    use: 'Tutorial content, the activity and centre/periphery measures, and the anxiety-like and activity patterns.',
+    use: 'Tutorial content, the activity and centre/periphery measures, within-session habituation, and the anxiety-like, activity and habituation patterns.',
     verified: 'Verified in PubMed',
     refs: OPENFIELD_REFS,
+  },
+  {
+    id: 'cagehang',
+    title: 'Cage hang (Cage Hang Lab)',
+    use: 'Tutorial content (inverted screen / cage-lid hanging, cut-offs, trials), the holding impulse (body weight × hang time) and the weakness and fatigue patterns.',
+    verified: 'Verified in PubMed',
+    refs: CAGEHANG_REFS,
   },
   {
     id: 'stats',

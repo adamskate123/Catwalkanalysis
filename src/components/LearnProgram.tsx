@@ -1,7 +1,7 @@
 import { useState, type ReactElement, type ReactNode } from 'react'
 import { getProgram, type ProgramId } from '../programs'
-import { ArenaDiagram, RotarodDiagram } from './diagrams'
-import { OPENFIELD_REFS, ROTAROD_REFS, type Reference } from '../lib/references'
+import { ArenaDiagram, CageHangDiagram, RotarodDiagram } from './diagrams'
+import { CAGEHANG_REFS, OPENFIELD_REFS, ROTAROD_REFS, type Reference } from '../lib/references'
 
 // Tutorials for the rotarod and open field programs. References live in lib/references.ts.
 
@@ -34,7 +34,7 @@ function Cite({ refs, ids }: { refs: Ref[]; ids: string[] }) {
   )
 }
 
-const CONTENT: Record<'rotarod' | 'openfield', Content> = {
+const CONTENT: Record<Exclude<ProgramId, 'catwalk'>, Content> = {
   rotarod: {
     title: 'The rotarod: a short tutorial',
     intro:
@@ -108,6 +108,12 @@ const CONTENT: Record<'rotarod' | 'openfield', Content> = {
           Classical anxiolytics such as benzodiazepines increase centre time in most studies, but drugs used for other anxiety disorders often do not, so the open
           field is best treated as one measure of anxiety-like behaviour among several.<Cite refs={OPENFIELD_REFS} ids={['prut2003']} />
         </p>
+        <p>
+          <b>Habituation.</b> Activity is highest when the arena is new and falls across the session as it becomes familiar (intrasession habituation); a second
+          session on another day starts lower still (intersession habituation). The two depend partly on different genes, so they are best measured separately.
+          <Cite refs={OPENFIELD_REFS} ids={['bolivar2009']} /> Open Field Lab reads values per interval (e.g. four 5-minute bins) and reports each animal's first
+          and last interval and the % change between them; the Habituation tab plots the curves.
+        </p>
       </>
     ),
     protocol: (
@@ -143,6 +149,58 @@ const CONTENT: Record<'rotarod' | 'openfield', Content> = {
       </ul>
     ),
     refs: OPENFIELD_REFS,
+  },
+  cagehang: {
+    title: 'The cage hang test: a short tutorial',
+    intro:
+      'In the cage hang (inverted screen or cage-lid hanging) test, a mouse grips a wire cage lid or grid that is then turned upside down, and the time until it falls is recorded. It is a quick, non-invasive test of four-limb grip strength and muscular endurance that can be repeated throughout life, which makes it common in neuromuscular and neurodegenerative disease models.',
+    figure: CageHangDiagram,
+    caption: 'The mouse holds on to the inverted lid above a soft surface; the timer runs until it falls or reaches the cut-off.',
+    how: (
+      <>
+        <p>
+          The inverted screen test goes back to Kondziela (1964). Most healthy young adult mice reach the cut-off easily, so it is a gross screen of strength
+          rather than a graded force measure; grip meters or weight-lifting tests give finer data.<Cite refs={CAGEHANG_REFS} ids={['deacon2013strength']} /> It
+          still detects weakness and fatigue well in disease models and can be repeated weekly to follow progression.
+        </p>
+        <p>
+          Heavier mice must hold more weight, so hang time alone penalises large animals. The <b>holding impulse</b>, body weight × hang time, corrects for
+          this and is used in standard operating procedures for neuromuscular models; wire and grid hanging tests are part of those
+          protocols.<Cite refs={CAGEHANG_REFS} ids={['aartsmarus2014']} /> Cage Hang Lab calculates it whenever body weight is loaded.
+        </p>
+      </>
+    ),
+    protocol: (
+      <ul>
+        <li>Use the same lid or grid, height above bedding, cut-off (e.g. 60 s) and number of trials for every group.</li>
+        <li>Give each mouse 2–3 trials with a rest of at least a few minutes between them, and record the best or mean.</li>
+        <li>Weigh the animals on the test day; the holding impulse needs it.</li>
+        <li>Shake the lid gently when turning it over so the mouse grips; keep handling the same across groups and testers.</li>
+        <li>
+          In the spreadsheet, keep one row per animal per trial with a <b>Trial</b> number and an <b>Age</b> (or timepoint) column, or one column per trial.
+          Age-binned Prism tables with ear tags as row titles are read directly.
+        </li>
+      </ul>
+    ),
+    confounds: (
+      <ul>
+        <li>
+          <b>Ceiling.</b> If many animals reach the cut-off, differences are compressed; the app warns when many values sit at the maximum. A longer cut-off
+          or a harder grid increases sensitivity.
+        </li>
+        <li>
+          <b>Body weight.</b> Lighter animals hang longer. Compare body weight and the holding impulse, or adjust for weight (Setup → Statistics).
+        </li>
+        <li>
+          <b>Weakness vs coordination vs motivation.</b> A short hang can reflect weakness, poor coordination or an animal that simply lets go. Grip strength,
+          rotarod and gait analysis help tell these apart.
+        </li>
+        <li>
+          <b>Fatigue.</b> A drop across trials suggests fatigability; confirm with longer rests between trials.
+        </li>
+      </ul>
+    ),
+    refs: CAGEHANG_REFS,
   },
 }
 

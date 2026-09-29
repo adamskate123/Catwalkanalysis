@@ -252,6 +252,12 @@ export const rotarod: ProgramDef = {
     { id: 'latency_last', from: 'latency', how: 'last' },
     { id: 'latency_improvement', from: 'latency', how: 'improvement' },
   ],
+  trialsTab: {
+    label: 'Learning curves',
+    title: 'Learning curves',
+    text: 'Group mean ± SEM for every trial of every session. Healthy animals usually improve across trials and days; a flatter curve with a similar starting point suggests impaired motor learning, while a curve that is lower throughout suggests a coordination or strength deficit. The Summary and Parameters tabs test best, first and last trial and improvement per animal.',
+  },
+  ceilingParam: 'latency',
   demo: () => demo(),
   demoFile: 'demo_rotarod_trials.csv',
   keyMinParams: 1,
