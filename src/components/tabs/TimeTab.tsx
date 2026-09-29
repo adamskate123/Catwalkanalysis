@@ -5,7 +5,7 @@ import { downloadPng, downloadSvg, safeName } from '../../lib/export'
 import { DivergingLegend, Heatmap, type HeatCell, type HeatRow } from '../charts/Heatmap'
 import type { TabProps } from './types'
 
-export function TimeTab({ results, theme, cfg, openMeasure }: TabProps) {
+export function TimeTab({ results, theme, cfg, openMeasure, pairIndex, allParams }: TabProps & { pairIndex?: number; allParams?: boolean }) {
   const pairs = useMemo(() => {
     const s = new Map<string, { group: string; reference: string }>()
     for (const t of results) for (const r of t.results) for (const c of r.comparisons) s.set(`${c.group}\u0000${c.reference}`, { group: c.group, reference: c.reference })
@@ -15,12 +15,13 @@ export function TimeTab({ results, theme, cfg, openMeasure }: TabProps) {
   const [pi, setPi] = useState(Math.max(0, def))
   const [scope, setScope] = useState<'summary' | 'all'>('summary')
   const ref = useRef<SVGSVGElement>(null)
-  const pair = pairs[Math.min(pi, pairs.length - 1)]
+  const pair = pairs[Math.min(pairIndex ?? pi, pairs.length - 1)]
   if (!pair) return <div className="card">Select a group column with at least two groups.</div>
+  const shown = allParams ? 'all' : scope
 
   const keys = results[0].results
     .map((r) => r.measure)
-    .filter((m) => (scope === 'all' ? true : !m.paw && (m.derived === undefined || m.derived === 'FRONT' || m.derived === 'HIND')))
+    .filter((m) => (shown === 'all' ? true : !m.paw && (m.derived === undefined || m.derived === 'FRONT' || m.derived === 'HIND')))
 
   const rows: HeatRow[] = keys.map((m) => ({
     key: m.key,
@@ -85,7 +86,7 @@ export function TimeTab({ results, theme, cfg, openMeasure }: TabProps) {
             PNG
           </button>
         </div>
-        <Heatmap rows={rows} cols={results.map((t) => ({ key: t.time, label: t.time }))} theme={theme} svgRef={ref} onSelect={(k) => openMeasure(k)} />
+        <Heatmap rows={rows} cols={results.map((t) => ({ key: t.time, label: t.time }))} theme={theme} svgRef={ref} name={`Progression ${pair.group} vs ${pair.reference}`} onSelect={(k) => openMeasure(k)} />
       </div>
     </>
   )

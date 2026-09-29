@@ -1,16 +1,18 @@
 import { useMemo, useState } from 'react'
 import { hasTrialAnalysis, program } from '../../programs'
 import { formatNum, type Measure } from '../../lib/analysis'
-import { animalCsv, download, statsCsv } from '../../lib/export'
+import { animalCsv, download, downloadZip, statsCsv, type GraphFormat } from '../../lib/export'
 import { changedMeasures } from '../../lib/interpret'
-import { buildPrismTables, describeSettings, toPzfx, type PrismOptions } from '../../lib/prism'
+import { buildPrismTables, buildStatsTables, describeSettings, describeStatistics, toPzfx, type PrismOptions } from '../../lib/prism'
 import { reportMarkdown } from '../../lib/report'
 import { APP_VERSION } from '../../version'
+import { allGraphFiles } from '../exportGraphs'
 import type { TabProps } from './types'
 
 type PrismScope = 'key' | 'significant' | 'all' | 'custom'
 
-export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps) {
+export function DataTab(props: TabProps) {
+  const { agg, measures, results, cfg, opt, colorOf } = props
   const [limit, setLimit] = useState(8)
   const prog = program()
   const byTrial = hasTrialAnalysis(prog) && agg.trials.length > 0
@@ -57,6 +59,92 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
     () => buildPrismTables(agg, { measures: prismMeasures, layout: effLayout, appVersion: APP_VERSION, runNoun: byTrial ? prog.runNoun : undefined }),
     [agg, prismMeasures, effLayout, byTrial, prog.runNoun],
   )
+  const [graphFormat, setGraphFormat] = useState<GraphFormat>('png')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+  const [origin, setOrigin] = useState<'bundle' | 'graphs'>('graphs')
+  const enc = (text: string) => new TextEncoder().encode(text)
+  const status = (where: 'bundle' | 'graphs') =>
+    origin === where && (busy || done) ? (
+      <p className="small" role="status" aria-live="polite" style={{ marginTop: 10, marginBottom: 0 }}>
+        {busy ?? done}
+      </p>
+    ) : null
+
+  const run = async (label: string, work: () => Promise<string>) => {
+    setOrigin(label.startsWith('Drawing') ? 'graphs' : 'bundle')
+    setDone(null)
+    setBusy(`${label}…`)
+    try {
+      setDone(await work())
+    } catch (e) {
+      setDone(`Could not export: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const exportAllGraphs = () =>
+    run('Drawing graphs', async () => {
+      const { files, count } = await allGraphFiles(props, graphFormat, '', setBusy)
+      if (!count) return 'No graphs to export.'
+      downloadZip(`${prog.filePrefix}_graphs_${stamp}.zip`, files)
+      return `Downloaded ${count} graph${count === 1 ? '' : 's'}${graphFormat === 'both' ? ' (SVG and PNG)' : ` (${graphFormat.toUpperCase()})`}.`
+    })
+
+  const exportBundle = () =>
+    run('Building the Prism bundle', async () => {
+      const statsTables = buildStatsTables(results, agg.groups, prismMeasures)
+      const methods = describeStatistics(results, cfg)
+      const pzfx = toPzfx([...statsTables, ...prismTables], { appVersion: APP_VERSION, notes: `${describeSettings(cfg)} ${methods}` })
+      const drawn = await allGraphFiles(props, 'both', '', setBusy, new Set(prismMeasures.map((m) => m.key)))
+      const count = drawn.count
+      const files = Object.fromEntries(Object.entries(drawn.files).map(([k, v]) => [`graphs/${k}`, v]))
+      const base = `${prog.filePrefix}_prism_bundle_${stamp}`
+      const readme = [
+        `${prog.name} (Behavior Lab) v${APP_VERSION}: Prism project with graphs and statistics, ${stamp}`,
+        '',
+        `${base}.pzfx`,
+        `  Open in GraphPad Prism (File > Open). It holds ${statsTables.length} "Statistics" table(s), one per timepoint, with the app's results for`,
+        `  ${prismMeasures.length} parameter(s): group n, mean, SD, SEM, omnibus p, FDR q and, per comparison, % difference, Hedges g, test statistic, df, p and Holm p.`,
+        '  These are fixed numbers from the app, identical to the Summary and Parameters tabs; Prism does not recalculate them.',
+        `  It also holds ${prismTables.length} data table(s) with the per-animal values, ready for Prism's own graphs and analyses.`,
+        '',
+        'statistics.csv',
+        '  The same statistics for every parameter and timepoint, for Excel or R.',
+        '',
+        'methods.txt',
+        '  How values were computed and which tests were run, for a methods section.',
+        '',
+        'summary.md',
+        '  The written summary from the app.',
+        '',
+        `graphs/svg and graphs/png (${count} graphs each)`,
+        '  The graphs the app draws for the parameters in the Prism file, plus the fingerprint and progression heatmaps,',
+        '  in folders by tab and timepoint. SVG files can be edited in Illustrator,',
+        '  Inkscape or PowerPoint; PNG files are 3x screen resolution. Prism cannot import them as editable Prism graphs;',
+        '  place them on a Prism layout as pictures if needed.',
+      ].join('\n')
+      const methodsText = [
+        `${prog.name} (Behavior Lab) v${APP_VERSION}, ${stamp}.`,
+        '',
+        describeSettings(cfg),
+        '',
+        methods,
+        '',
+        `Groups analysed: ${agg.groups.join(', ')}. Timepoints: ${agg.times.filter(Boolean).length ? agg.times.join(', ') : 'one'}.`,
+      ].join('\n')
+      downloadZip(`${base}.zip`, {
+        'README.txt': enc(readme),
+        [`${base}.pzfx`]: enc(pzfx),
+        'statistics.csv': enc(statsCsv(results, agg.groups)),
+        'methods.txt': enc(methodsText),
+        'summary.md': enc(reportMarkdown(agg, results, cfg, opt)),
+        ...files,
+      })
+      return `Downloaded the Prism bundle: ${statsTables.length + prismTables.length} Prism tables and ${count} graphs.`
+    })
+
   const exportPrism = () =>
     download(
       `${prog.filePrefix}_prism_${stamp}.pzfx`,
@@ -84,7 +172,7 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
         </div>
         <p className="small muted" style={{ marginTop: 10, marginBottom: 0 }}>
           The per-animal file has one row per animal and timepoint ({prog.runsNoun} averaged{cfg.speedAdjust ? ', speed-adjusted' : ''}); it can be opened in Excel, Prism or R for
-          further modelling, such as mixed models for repeated measures. Charts can be downloaded as SVG or PNG from each chart's header.
+          further modelling, such as mixed models for repeated measures. Single charts can be downloaded as SVG or PNG from each chart's header, all charts on a tab with "Export this tab's graphs", and every chart below.
         </p>
       </div>
       <div className="card">
@@ -191,10 +279,43 @@ export function DataTab({ agg, measures, results, cfg, opt, colorOf }: TabProps)
           <button className="btn primary" onClick={exportPrism} disabled={prismTables.length === 0}>
             Download Prism file (.pzfx)
           </button>
+          <button className="btn" onClick={exportBundle} disabled={prismTables.length === 0 || busy !== null}>
+            Prism with graphs and statistics (.zip)
+          </button>
           <span className="small muted">
             {prismTables.length} data table{prismTables.length === 1 ? '' : 's'} from {prismMeasures.length} parameter{prismMeasures.length === 1 ? '' : 's'}
           </span>
         </div>
+        <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
+          The .zip adds the app's statistics as Prism tables, exactly as calculated here (n, mean, SD, SEM, % difference, Hedges g, test statistic, p, Holm p and FDR q),
+          plus the graphs of the same parameters as SVG and PNG, a statistics CSV and a methods note. Prism cannot open the app's graphs as editable Prism graphs, so they are included as image
+          files.
+        </p>
+        {status('bundle')}
+      </div>
+      <div className="card">
+        <h2>Graphs</h2>
+        <p className="small">
+          Download every graph the app draws for this analysis, in folders by tab and timepoint: each parameter at each timepoint
+          {agg.times.length > 1 ? ', time courses' : ''}
+          {byTrial ? `, ${(prog.trialsTab?.label ?? 'trial curves').toLowerCase()}` : ''}, fingerprints
+          {measures.some((m) => m.def.id === 'body_weight') ? ', weight checks' : ''}
+          {prog.features.speed ? ', speed checks' : ''}. Graphs use the light theme. To save only the graphs on one tab, use "Export this tab's graphs" above the tab.
+        </p>
+        <div className="row">
+          <label className="small row">
+            Format
+            <select value={graphFormat} onChange={(e) => setGraphFormat(e.target.value as GraphFormat)} style={{ width: 'auto' }}>
+              <option value="png">PNG (images, 3× resolution)</option>
+              <option value="svg">SVG (editable vector)</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
+          <button className="btn primary" onClick={exportAllGraphs} disabled={busy !== null}>
+            Download every graph (.zip)
+          </button>
+        </div>
+        {status('graphs')}
       </div>
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between' }}>

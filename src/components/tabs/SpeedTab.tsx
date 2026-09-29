@@ -4,12 +4,12 @@ import { linearFit, finite } from '../../lib/stats'
 import { Scatter } from '../charts/Scatter'
 import type { TabProps } from './types'
 
-export function SpeedTab(props: TabProps & { goSetup: () => void }) {
+export function SpeedTab(props: TabProps & { goSetup: () => void; pick?: string }) {
   const { agg, measures, results, time, theme, colorOf, cfg, goSetup, onLearn } = props
   const speed = measures.find((m) => m.def.id === 'speed')
   const candidates = measures.filter((m) => m !== speed)
   const [key, setKey] = useState(() => candidates.find((m) => m.key === 'stride_length|HIND')?.key ?? candidates.find((m) => m.def.id === 'stand')?.key ?? candidates[0]?.key)
-  const m = candidates.find((x) => x.key === key)
+  const m = candidates.find((x) => x.key === (props.pick ?? key))
   const subs = agg.subjects.filter((s) => s.time === time)
 
   const fit = useMemo(() => {

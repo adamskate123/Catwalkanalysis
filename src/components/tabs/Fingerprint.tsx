@@ -26,7 +26,7 @@ function cellFor(r: MeasureResult, cmp: Comparison | undefined, col: string): He
   }
 }
 
-export function Fingerprint({ results, time, theme, cfg, openMeasure }: TabProps) {
+export function Fingerprint({ results, time, theme, cfg, openMeasure, pairIndex }: TabProps & { pairIndex?: number }) {
   const tr = results.find((r) => r.time === time) ?? results[0]
   const pairs = useMemo(() => {
     const s = new Map<string, { group: string; reference: string }>()
@@ -35,7 +35,7 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure }: TabProps
   }, [tr])
   const defaultPair = pairs.findIndex((p) => p.group === cfg.diseaseGroup && p.reference === cfg.controlGroup)
   const [pi, setPi] = useState(Math.max(0, defaultPair))
-  const pair = pairs[Math.min(pi, pairs.length - 1)]
+  const pair = pairs[Math.min(pairIndex ?? pi, pairs.length - 1)]
   const pawRef = useRef<SVGSVGElement>(null)
   const bodyRef = useRef<SVGSVGElement>(null)
 
@@ -122,6 +122,7 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure }: TabProps
               ]}
               theme={theme}
               svgRef={pawRef}
+              name="Per-paw fingerprint"
               onSelect={(row, col) => openMeasure(`${row}|${col}`)}
             />
           ) : (
@@ -141,7 +142,7 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure }: TabProps
             </span>
           </div>
           {bodyRows.length ? (
-            <Heatmap rows={bodyRows} cols={[{ key: 'g', label: 'g' }]} theme={theme} svgRef={bodyRef} onSelect={(row) => openMeasure(row)} />
+            <Heatmap rows={bodyRows} cols={[{ key: 'g', label: 'g' }]} theme={theme} svgRef={bodyRef} name={paws ? 'Whole-body fingerprint' : 'Fingerprint'} onSelect={(row) => openMeasure(row)} />
           ) : (
             <p className="small muted">No {paws ? 'whole-body ' : ''}parameters in this file.</p>
           )}

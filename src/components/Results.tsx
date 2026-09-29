@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { TabGraphsExport } from './TabGraphsExport'
 import type { AggregateResult, AnalysisConfig, Measure, TimeResults } from '../lib/analysis'
 import type { InterpretOptions } from '../lib/interpret'
 import type { Experiment } from '../lib/experiment'
@@ -59,6 +60,7 @@ export function Results(props: Props) {
   const [timePick, setTime] = useState<string | null>(null)
   const time = timePick !== null && results.some((r) => r.time === timePick) ? timePick : busiest
   const [measureKey, setMeasureKey] = useState<string | null>(null)
+  const tabRef = useRef<HTMLDivElement>(null)
 
   const colorOf = useMemo(() => {
     // Colour follows the group's position in the full group order, so excluding
@@ -95,6 +97,9 @@ export function Results(props: Props) {
   ]
 
   const showTimePicker = hasTime && tab !== 'time' && tab !== 'trials' && tab !== 'setup' && tab !== 'data' && tab !== 'experiment'
+  // Tabs that draw charts get "Export this tab's graphs".
+  const chartTab = (['story', 'fingerprint', 'explore', 'trials', 'time', 'speed', 'weight'] as Tab[]).includes(tab)
+  const tabLabel = tabs.find(([id]) => id === tab)?.[1] ?? tab
 
   return (
     <>
@@ -124,16 +129,24 @@ export function Results(props: Props) {
           </button>
         ))}
       </div>
-      {showTimePicker && (
-        <div className="row no-print" style={{ marginBottom: 12 }}>
-          <span className="small muted">Timepoint:</span>
-          {results.map((r) => (
-            <button key={r.time} className={`btn sm${r.time === time ? ' primary' : ''}`} onClick={() => setTime(r.time)} aria-pressed={r.time === time}>
-              {r.time}
-            </button>
-          ))}
+      {(showTimePicker || chartTab) && (
+        <div className="row no-print" style={{ marginBottom: 12, justifyContent: 'space-between' }}>
+          {showTimePicker ? (
+            <span className="row">
+              <span className="small muted">Timepoint:</span>
+              {results.map((r) => (
+                <button key={r.time} className={`btn sm${r.time === time ? ' primary' : ''}`} onClick={() => setTime(r.time)} aria-pressed={r.time === time}>
+                  {r.time}
+                </button>
+              ))}
+            </span>
+          ) : (
+            <span />
+          )}
+          {chartTab && <TabGraphsExport key={tab} root={tabRef} name={tabLabel} time={showTimePicker ? time : undefined} />}
         </div>
       )}
+      <div ref={tabRef}>
       {tab === 'summary' && <Summary {...tabProps} goSetup={() => setTab('setup')} />}
       {tab === 'story' && <StoryTab {...tabProps} />}
       {tab === 'fingerprint' && <Fingerprint {...tabProps} />}
@@ -153,6 +166,7 @@ export function Results(props: Props) {
         />
       )}
       {tab === 'setup' && <Setup ds={ds} measures={measures} cfg={cfg} setCfg={setCfg} opt={opt} setOpt={setOpt} colorOf={colorOf} onLearn={onLearn} />}
+      </div>
     </>
   )
 }

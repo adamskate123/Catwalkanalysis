@@ -6,7 +6,7 @@
 //    subcolumns = animals. Each animal keeps the same subcolumn at every timepoint, so Prism's
 //    repeated-measures two-way ANOVA / mixed-effects analysis can be run directly.
 
-import type { AggregateResult, AnalysisConfig, Measure } from './analysis'
+import type { AggregateResult, AnalysisConfig, Measure, MeasureResult, TimeResults } from './analysis'
 import { naturalCompare, trialAxis, trialValue } from './analysis'
 import { program } from '../programs'
 
@@ -182,6 +182,78 @@ export function toPzfx(tables: PzfxTable[], opt: { appVersion: string; notes?: s
     '</GraphPadPrismFile>',
   ]
   return parts.join('\n')
+}
+
+/**
+ * The app's own statistics as Prism tables (one per timepoint): rows are parameters,
+ * columns are group n / mean / SD / SEM, the omnibus p, the FDR q and, for each
+ * comparison, % difference, Hedges g, test statistic, p and Holm-adjusted p.
+ * These are fixed results, not Prism analyses, so they match the app exactly.
+ */
+export function buildStatsTables(results: TimeResults[], groups: string[], measures?: Measure[]): PzfxTable[] {
+  const keep = measures ? new Set(measures.map((m) => m.key)) : null
+  const tables: PzfxTable[] = []
+  for (const t of results) {
+    const rs = t.results.filter((r) => !keep || keep.has(r.measure.key))
+    if (!rs.length) continue
+    const pairs: string[] = []
+    for (const r of rs) for (const c of r.comparisons) if (!pairs.includes(`${c.group} vs ${c.reference}`)) pairs.push(`${c.group} vs ${c.reference}`)
+    const col = (title: string, vals: (number | null | undefined)[]) => ({ title, subcolumns: [vals.map((v) => (v === undefined || v === null || !Number.isFinite(v) ? null : v))] })
+    const columns: PzfxTable['columns'] = []
+    for (const g of groups) {
+      columns.push(col(`${g} n`, rs.map((r) => r.groups[g]?.n)))
+      columns.push(col(`${g} mean`, rs.map((r) => r.groups[g]?.mean)))
+      columns.push(col(`${g} SD`, rs.map((r) => r.groups[g]?.sd)))
+      columns.push(col(`${g} SEM`, rs.map((r) => r.groups[g]?.sem)))
+    }
+    if (rs.some((r) => r.omnibus)) columns.push(col('Omnibus p', rs.map((r) => r.omnibus?.p)))
+    columns.push(col('FDR q (BH)', rs.map((r) => r.q)))
+    for (const pair of pairs) {
+      const cmp = (r: MeasureResult) => r.comparisons.find((c) => `${c.group} vs ${c.reference}` === pair)
+      columns.push(col(`${pair}: difference %`, rs.map((r) => cmp(r)?.diffPct)))
+      columns.push(col(`${pair}: Hedges g`, rs.map((r) => cmp(r)?.g)))
+      const testName = (rs.map((r) => cmp(r)?.test.test).find(Boolean) ?? 'test').replace(/\s*\(exact\)$/, '')
+      columns.push(col(`${pair}: ${testName} statistic`, rs.map((r) => cmp(r)?.test.statistic)))
+      if (rs.some((r) => typeof cmp(r)?.test.df === 'number')) columns.push(col(`${pair}: df`, rs.map((r) => (typeof cmp(r)?.test.df === 'number' ? (cmp(r)!.test.df as number) : null))))
+      columns.push(col(`${pair}: p`, rs.map((r) => cmp(r)?.test.p)))
+      columns.push(col(`${pair}: p (Holm)`, rs.map((r) => cmp(r)?.pAdj)))
+    }
+    if (rs.some((r) => r.rescuePct !== undefined)) columns.push(col('Rescue %', rs.map((r) => r.rescuePct)))
+    tables.push({ title: `Statistics${t.time ? ` · ${t.time}` : ''}`, type: 'OneWay', rowTitles: rs.map((r) => r.measure.label), columns })
+  }
+  const titles = uniqueTitles(tables.map((t) => t.title))
+  tables.forEach((t, i) => (t.title = titles[i]))
+  return tables
+}
+
+/** Plain-language description of the statistics run, for the Prism notes and the methods file. */
+export function describeStatistics(results: TimeResults[], cfg: AnalysisConfig): string {
+  const tests = new Set<string>()
+  const omni = new Set<string>()
+  for (const t of results)
+    for (const r of t.results) {
+      for (const c of r.comparisons) if (c.test.test) tests.add(c.test.test)
+      if (r.omnibus?.test) omni.add(r.omnibus.test)
+    }
+  const PROSE: Record<string, string> = {
+    'Welch t': "Welch's t-test",
+    'Mann–Whitney U': 'the Mann–Whitney U test',
+    'Mann–Whitney U (exact)': 'the Mann–Whitney U test (exact p for small samples without ties)',
+    'One-way ANOVA': 'one-way ANOVA',
+    'Kruskal–Wallis': 'Kruskal–Wallis test',
+  }
+  const prose = (set: Set<string>) => [...set].map((t) => PROSE[t] ?? t).join(' or ')
+  const parts = [
+    `Each group was compared with the control${cfg.diseaseGroup ? ` and, for treated groups, with the untreated disease group (${cfg.diseaseGroup})` : ''} using ${prose(tests) || (cfg.test === 'parametric' ? "Welch's t-test" : 'the Mann–Whitney U test')}.`,
+    'Within each parameter and timepoint, the comparisons were Holm-adjusted.',
+    omni.size ? `With more than two groups, an omnibus ${prose(omni)} was also run.` : '',
+    'Across parameters at each timepoint, the primary p values (omnibus with more than two groups, otherwise the pairwise p) were corrected with the Benjamini-Hochberg false discovery rate (q).',
+    "Effect sizes are Hedges' g (bias-corrected standardised mean difference, group minus reference).",
+    cfg.weightAdjust
+      ? 'Values were adjusted for body weight before testing (ANCOVA-style: slope pooled within groups at each timepoint, values re-centred on the mean weight at that timepoint).'
+      : '',
+  ]
+  return parts.filter(Boolean).join(' ')
 }
 
 export function describeSettings(cfg: AnalysisConfig): string {

@@ -3,6 +3,27 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.5.0] - 2026-09-29
+
+### Added
+
+- **Prism with graphs and statistics (.zip)** on the Data & export tab. It contains:
+  - the Prism project with, in addition to the data tables, one "Statistics" table per timepoint holding the app's results exactly as calculated: n, mean, SD and SEM per group, omnibus p, FDR q and, per comparison, % difference, Hedges g, test statistic, df, p and Holm-adjusted p;
+  - the graphs of the same parameters (plus fingerprint and progression heatmaps) as SVG and PNG;
+  - `statistics.csv`, the written summary, a README and `methods.txt`, which states the settings and the tests run.
+  - Prism cannot import the app's graphs as editable Prism graphs, so they are included as image files.
+- **Export this tab's graphs**, above every tab with charts: all charts on that tab as PNG, SVG or both.
+- **Download every graph (.zip)**: every chart the app can draw for the analysis, in folders by tab and timepoint, in the light theme.
+
+### Changed
+
+- Exported SVG and PNG charts now include the group legend, and heatmaps include their colour scale.
+- File names keep age-window signs readable ("≤50 days" → "up_to_50_days").
+
+### Fixed
+
+- Body weight no longer gets "first / last interval" habituation parameters or a trial curve when a weights file is joined to per-interval or per-trial data.
+
 ## [2.4.0] - 2026-09-29
 
 Tested with the real open field Prism file that holds within-session interval sheets.

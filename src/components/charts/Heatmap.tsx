@@ -23,10 +23,12 @@ interface Props {
   theme: ChartTheme
   onSelect?: (rowKey: string, col: string) => void
   svgRef?: Ref<SVGSVGElement>
+  /** File name used when the chart is exported with others. */
+  name?: string
   title?: string
 }
 
-export function Heatmap({ rows, cols, theme, onSelect, svgRef, title }: Props) {
+export function Heatmap({ rows, cols, theme, onSelect, svgRef, title, name }: Props) {
   const [ref, width] = useWidth<HTMLDivElement>()
   const [tip, setTip] = useState<TipState | null>(null)
   const labelW = Math.min(200, Math.max(120, width * 0.34))
@@ -50,7 +52,7 @@ export function Heatmap({ rows, cols, theme, onSelect, svgRef, title }: Props) {
 
   return (
     <div ref={ref} className="chart" onPointerLeave={() => setTip(null)}>
-      <svg ref={svgRef} width={svgW} height={height} viewBox={`0 0 ${svgW} ${height}`} role="img" aria-label={title ?? 'Effect-size heatmap'} xmlns="http://www.w3.org/2000/svg" fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif">
+      <svg ref={svgRef} width={svgW} height={height} viewBox={`0 0 ${svgW} ${height}`} role="img" aria-label={title ?? 'Effect-size heatmap'} data-chart-name={name} data-scale={JSON.stringify(SCALE_STEPS.map((g) => divergingColor(theme, g)))} xmlns="http://www.w3.org/2000/svg" fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif">
         <rect width={svgW} height={height} fill={theme.surface} />
         {title && (
           <text x={4} y={15} fontSize={12} fontWeight={600} fill={theme.text}>
@@ -108,8 +110,10 @@ export function Heatmap({ rows, cols, theme, onSelect, svgRef, title }: Props) {
   )
 }
 
+const SCALE_STEPS = [-2.5, -1.8, -1.2, -0.8, -0.5, 0, 0.5, 0.8, 1.2, 1.8, 2.5]
+
 export function DivergingLegend({ theme }: { theme: ChartTheme }) {
-  const steps = [-2.5, -1.8, -1.2, -0.8, -0.5, 0, 0.5, 0.8, 1.2, 1.8, 2.5]
+  const steps = SCALE_STEPS
   return (
     <div className="div-legend" aria-label="Colour scale: Hedges g">
       <span>Lower than reference</span>

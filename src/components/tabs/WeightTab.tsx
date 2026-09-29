@@ -6,13 +6,13 @@ import { Scatter } from '../charts/Scatter'
 import type { TabProps } from './types'
 
 /** Body weight by group, and each parameter plotted against weight per animal. */
-export function WeightTab(props: TabProps & { goSetup: () => void }) {
+export function WeightTab(props: TabProps & { goSetup: () => void; pick?: string }) {
   const { agg, measures, results, time, theme, colorOf, cfg, goSetup } = props
   const weight = measures.find((m) => m.def.id === 'body_weight')
   const candidates = measures.filter((m) => m !== weight && m.def.id !== 'body_weight')
   const main = ['latency', 'distance', 'speed']
   const [key, setKey] = useState((main.map((id) => candidates.find((c) => c.def.id === id)).find(Boolean) ?? candidates[0])?.key)
-  const m = candidates.find((x) => x.key === key) ?? candidates[0]
+  const m = candidates.find((x) => x.key === (props.pick ?? key)) ?? candidates[0]
   const subs = agg.subjects.filter((s) => s.time === time)
   const w = (s: (typeof subs)[number]) => s.weight ?? NaN
 

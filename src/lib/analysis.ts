@@ -104,7 +104,8 @@ export function buildMeasures(ds: Dataset): Measure[] {
     // First, last and % change for every parameter measured across ordered intervals (habituation).
     if (program().trialSummaries) {
       const noun = (program().trialColumn ?? 'Trial').toLowerCase()
-      for (const src of measures.filter((m) => m.col !== undefined && !m.trial && ds.rows.some((r) => r[triali] !== null && r[m.col!] !== null))) {
+      // Body weight is joined onto every row; it is not a within-session measure.
+      for (const src of measures.filter((m) => m.col !== undefined && !m.trial && m.def.id !== 'body_weight' && ds.rows.some((r) => r[triali] !== null && r[m.col!] !== null))) {
         const base = src.def
         const name = src.label.replace(/ per (interval|trial|bin)$/i, '')
         for (const [how, suffix, label, unit, description] of [

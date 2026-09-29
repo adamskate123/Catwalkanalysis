@@ -7,13 +7,13 @@ import { ChartCard } from './figures'
 import type { TabProps } from './types'
 
 /** Learning curves: each measure across the ordered trials of every session. */
-export function TrialsTab(props: TabProps) {
+export function TrialsTab(props: TabProps & { pick?: string }) {
   const { agg, measures, theme, colorOf } = props
   const prog = program()
-  const perTrial = measures.filter((m) => m.col !== undefined && agg.trials.some((t) => Number.isFinite(t.values[m.key])))
+  const perTrial = measures.filter((m) => m.col !== undefined && m.def.id !== 'body_weight' && agg.trials.some((t) => Number.isFinite(t.values[m.key])))
   const [key, setKey] = useState(perTrial[0]?.key ?? '')
   const ref = useRef<SVGSVGElement>(null)
-  const m = perTrial.find((x) => x.key === key) ?? perTrial[0]
+  const m = perTrial.find((x) => x.key === (props.pick ?? key)) ?? perTrial[0]
   if (!m) return <div className="card">No per-{prog.runNoun} values found. Load a file with one row per {prog.runNoun} and a {prog.runNoun} number column.</div>
 
   const noun = prog.trialColumn ?? prog.runNoun[0].toUpperCase() + prog.runNoun.slice(1)
