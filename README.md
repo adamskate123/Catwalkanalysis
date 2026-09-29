@@ -103,6 +103,8 @@ A unit test checks that the latest changelog entry matches `package.json`.
 
 `.github/workflows/deploy.yml` tests, builds and publishes the app to **GitHub Pages** on every push to `main`. To enable it, go to the repository's **Settings → Pages** and set **Source** to **GitHub Actions**. The app will be served at `https://<user>.github.io/<repo>/`. Open that URL on a phone and choose *Add to Home Screen* to install it.
 
+If a merge to `main` does not start a deploy (the footer still shows the previous version), open **Actions → Test and deploy to GitHub Pages → Run workflow**, choose `main`, and run it.
+
 ## Caveats
 
 Automated interpretations are pattern-based aids for orientation, not diagnoses. Confirm them with study-specific hypotheses, histology and complementary behavioural tests. For definitive repeated-measures analyses, export the per-animal CSV and fit mixed models (for example with speed as a covariate).
