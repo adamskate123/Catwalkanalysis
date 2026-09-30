@@ -20,7 +20,14 @@ import {
 // ---------------------------------------------------------------------------
 // Measures (one analysable variable each)
 
-export type DerivedKind = 'FRONT' | 'HIND' | 'ASYM_F' | 'ASYM_H'
+export type DerivedKind = 'FRONT' | 'HIND' | 'ASYM_F' | 'ASYM_H' | 'HF'
+
+/**
+ * Print measures that also get a hind ÷ front ratio. Hind/fore ratios of print size
+ * and intensity correct for body size and track hind-limb function after thoracic
+ * spinal cord injury (reviewed in Timotius et al. 2023, doi:10.3389/fnbeh.2023.1147784).
+ */
+export const HIND_FRONT_RATIO = new Set(['print_length', 'print_area', 'max_contact_area', 'max_intensity', 'mean_intensity', 'print_elongation'])
 
 export interface Measure {
   key: string
@@ -42,6 +49,7 @@ export const DERIVED_LABEL: Record<DerivedKind, string> = {
   HIND: 'hind paws (mean)',
   ASYM_F: 'front L−R asymmetry (%)',
   ASYM_H: 'hind L−R asymmetry (%)',
+  HF: 'hind ÷ front ratio',
 }
 
 export function measureLabel(def: ParamDef, paw?: Paw, variant?: string, derived?: DerivedKind): string {
@@ -77,6 +85,13 @@ export function buildMeasures(ds: Dataset): Measure[] {
     }
   })
   const measures = [...byKey.values()]
+  // Print elongation (length ÷ width) per paw, when both are measured for every paw
+  const elong = paramById('print_elongation')
+  if (elong && !measures.some((m) => m.def.id === 'print_elongation')) {
+    const has = (id: string, p: Paw) => measures.some((m) => m.def.id === id && m.paw === p && m.col !== undefined)
+    if (PAWS.every((p) => has('print_length', p) && has('print_width', p)))
+      for (const p of PAWS) measures.push({ key: `print_elongation|${p}`, def: elong, paw: p, stat: 'mean', label: measureLabel(elong, p) })
+  }
   // Derived fore/hind means and asymmetry indices for complete per-paw sets
   const perPaw = new Map<string, Measure[]>()
   for (const m of measures) {
@@ -88,7 +103,7 @@ export function buildMeasures(ds: Dataset): Measure[] {
   for (const [id, arr] of perPaw) {
     if (arr.length < 4) continue
     const def = paramById(id)!
-    for (const d of ['FRONT', 'HIND', 'ASYM_F', 'ASYM_H'] as DerivedKind[]) {
+    for (const d of ['FRONT', 'HIND', 'ASYM_F', 'ASYM_H', ...(HIND_FRONT_RATIO.has(id) ? ['HF'] : [])] as DerivedKind[]) {
       measures.push({ key: `${id}|${d}`, def, derived: d, stat: 'mean', label: measureLabel(def, undefined, undefined, d) })
     }
   }
@@ -134,7 +149,7 @@ export function buildMeasures(ds: Dataset): Measure[] {
 }
 
 const PAW_ORDER: Record<string, number> = { LF: 0, RF: 1, LH: 2, RH: 3 }
-const DERIVED_ORDER: Record<DerivedKind, number> = { FRONT: 4, HIND: 5, ASYM_F: 6, ASYM_H: 7 }
+const DERIVED_ORDER: Record<DerivedKind, number> = { FRONT: 4, HIND: 5, ASYM_F: 6, ASYM_H: 7, HF: 8 }
 
 export function sortMeasures(ms: Measure[]): Measure[] {
   const { params, categoryOrder } = program()
@@ -533,6 +548,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     raw.forEach((m, j) => {
       values[m.key] = mean(finite(arr.map((r) => r.v[j])))
     })
+    addElongation(values, measures)
     addDerived(values, measures)
     addTrialDerived(values, measures, raw, arr)
     addComputed(values, measures, weightM ? mean(finite(arr.map((r) => r.weight))) : NaN)
@@ -563,7 +579,8 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     const grand = new Map<string, number>()
     for (const t of new Set(subjects.map((s) => s.time))) grand.set(t, mean(finite(subjects.filter((s) => s.time === t).map(w))))
     for (const m of measures) {
-      if (m === weightM || m.def.id === 'body_weight' || m.def.noWeightAdjust) continue
+      // Hind ÷ front ratios are already scale-free, like parameters that include weight.
+      if (m === weightM || m.def.id === 'body_weight' || m.def.noWeightAdjust || m.derived === 'HF') continue
       const slope = pooledWithinSlope(subjects.map((s) => ({ x: w(s), y: s.values[m.key], g: `${s.group}\u0000${s.time}` })))
       if (!Number.isFinite(slope)) continue
       weightSlopes[m.key] = slope
@@ -673,6 +690,16 @@ function addComputed(values: Record<string, number>, measures: Measure[], weight
   }
 }
 
+/** Print length ÷ width per paw, from the animal's mean length and width. */
+function addElongation(values: Record<string, number>, measures: Measure[]) {
+  for (const m of measures) {
+    if (m.def.id !== 'print_elongation' || !m.paw) continue
+    const len = values[`print_length|${m.paw}`]
+    const wid = values[`print_width|${m.paw}`]
+    values[m.key] = wid > 0 ? len / wid : NaN
+  }
+}
+
 function addDerived(values: Record<string, number>, measures: Measure[]) {
   for (const m of measures) {
     if (!m.derived) continue
@@ -691,6 +718,9 @@ function addDerived(values: Record<string, number>, measures: Measure[]) {
         break
       case 'ASYM_H':
         out = asym(lh, rh)
+        break
+      case 'HF':
+        out = lf + rf !== 0 ? (lh + rh) / (lf + rf) : NaN
         break
     }
     values[m.key] = out

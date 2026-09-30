@@ -3,6 +3,20 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.6.0] - 2026-09-30
+
+Checked against the CatWalk literature in PubMed (Hamers et al. 2001 and 2006; Koopmans et al. 2005; Timotius et al. 2023; Basso et al. 2006).
+
+### Added
+
+- **Print elongation (length ÷ width)** for each paw, with front, hind, asymmetry and hind ÷ front values. It is a shape measure: it does not scale with paw size or body weight, and it is not adjusted for weight.
+- **Hind ÷ front ratios** for print length, print area, max contact area, max and mean intensity, and elongation. They correct for body size (hind/fore ratios of print size and intensity are used after thoracic spinal cord injury) and are shown as an H÷F column in the Gait fingerprint.
+- **Body contact parameters.** When abdomen, tail, genitalia, nose, hip or knee contacts are labelled during classification in CatWalk XT, their "% of run" columns are read as a new "Body contact with the glass (dragging)" category.
+- **Hind-paw dragging / poor hind-limb clearance** pattern:
+  - Key markers: hind elongation ↑, hind ÷ front elongation ↑ and body contact ↑.
+  - Supporting markers: hind swing speed ↓, hind stance ↑, hind stride ↓ and regularity index ↓. These are the CatWalk changes reported consistently after spinal cord injury, but they are not specific to dragging.
+- **Key markers for patterns.** A pattern can name key markers; it is then shown and reported only when at least one of them changed. The dragging pattern cannot be triggered by slower, shorter hind steps alone.
+
 ## [2.5.1] - 2026-09-30
 
 Tested with a real CatWalk XT run-statistics export (two test dates) and a weekly colony weight log.

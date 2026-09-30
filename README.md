@@ -1,6 +1,6 @@
 # Behavior Lab · Gait, Rotarod, Open Field, Cage Hang
 
-**Version 2.5.1**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 2.6.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
 A web app that turns rodent behavioural data into structured graphs, statistics and a written phenotype summary, with a built-in tutorial for each test. It contains four programs; switch between them by clicking the name and icon at the top left:
 
@@ -15,6 +15,7 @@ It runs in any modern browser on **phones, tablets and desktops**, and can be in
 
 ## Programs
 
+- **Gait Lab: dragging.** Print elongation (length ÷ width) for each paw and hind ÷ front ratios of print length, area, contact area, intensity and elongation are calculated. Body contacts labelled in CatWalk XT (abdomen, tail, genitalia, nose, hips, knees; % of run) are read as parameters. A *Hind-paw dragging / poor hind-limb clearance* pattern combines these with hind swing speed, stance, stride and the regularity index. It is shown only when elongation or body contact changed, because the other markers are shared with any hind-limb deficit.
 - **Rotarod Lab** recognises latency to fall, rod speed at fall, distance and passive rotations. It averages trials per animal and day, and computes best, first and last trial and the first-to-last improvement for each animal. A **Learning curves** tab plots every trial of every day. Prism export adds "by trial" grouped tables for repeated-measures analysis. It flags impaired coordination and balance, reduced motor learning, and gripping instead of walking.
 - **Open Field Lab** recognises distance, velocity, time moving and immobile, centre time, entries and latency, periphery time, rearing, grooming, stereotypy and fecal boli, including EthoVision's long column names (`In zone Center / Center-point Cumulative Duration s`). Within-session intervals (EthoVision time bins, or Prism sheets such as "Distance vs interval ≤50 days" with groups "… interval 1", "… interval 2") are read as intervals: a **Habituation** tab plots each group across the session, and the first interval, last interval and % change first → last are tested per animal. It flags hypo- and hyperactivity, anxiety-like centre avoidance, reduced centre avoidance and repetitive behaviour.
 - **Cage Hang Lab** recognises hang time (latency to fall), best, first and last trial, the change from first to last trial, number of falls and body weight. It computes **holding impulse** (body weight × hang time, g·s; Deacon 2013) when weights are present; holding impulse is not further adjusted for weight. A **Trials** tab plots every trial, and a warning appears when many values sit at the cut-off. It flags reduced grip strength and endurance, and fatigue across trials.

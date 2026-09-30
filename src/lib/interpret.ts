@@ -6,13 +6,19 @@ import type { AnalysisConfig, Comparison, MeasureResult, TimeResults } from './a
 import { formatP, primaryComparison } from './analysis'
 import { program } from '../programs'
 
-export type Where = 'run' | 'front' | 'hind' | 'any' | 'asymF' | 'asymH'
+export type Where = 'run' | 'front' | 'hind' | 'any' | 'asymF' | 'asymH' | 'hindFront'
 
 export interface SignatureItem {
   param: string
   where: Where
   /** +1 increase expected, -1 decrease expected, 0 either direction (magnitude) */
   dir: 1 | -1 | 0
+  /**
+   * A marker specific to this pattern. When a pattern has key markers, it is
+   * reported only if at least one of them changed, so that shared, non-specific
+   * markers (e.g. slower swing) cannot report it on their own.
+   */
+  key?: boolean
 }
 
 export interface Domain {
@@ -58,6 +64,8 @@ function whereMatches(r: MeasureResult, where: Where): boolean {
       return m.derived === 'ASYM_F'
     case 'asymH':
       return m.derived === 'ASYM_H'
+    case 'hindFront':
+      return m.derived === 'HF'
   }
 }
 
@@ -115,7 +123,17 @@ export function interpret(tr: TimeResults, cfg: AnalysisConfig, opt: InterpretOp
  * when fewer than two were measured (e.g. a rotarod file with latency only).
  */
 export function isReported(f: DomainFinding): boolean {
-  return f.supporting.length > 0 && f.supporting.length >= Math.min(2, f.available)
+  return isShown(f) && f.supporting.length >= Math.min(2, f.available)
+}
+
+/**
+ * A pattern is shown at all when at least one marker changed and, for a pattern
+ * with key markers, at least one of those did.
+ */
+export function isShown(f: DomainFinding): boolean {
+  if (!f.supporting.length) return false
+  const keys = f.domain.items.filter((i) => i.key)
+  return !keys.length || f.supporting.some((e) => keys.some((i) => i.param === e.result.measure.def.id && whereMatches(e.result, i.where)))
 }
 
 export function describeEvidence(e: Evidence): string {

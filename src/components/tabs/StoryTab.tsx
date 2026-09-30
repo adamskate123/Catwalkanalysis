@@ -2,7 +2,7 @@ import { program } from '../../programs'
 import { useMemo, type ReactNode } from 'react'
 import { formatP, primaryComparison, type Measure } from '../../lib/analysis'
 import { download, safeName } from '../../lib/export'
-import { describeEvidence, interpret, isSignificant, type DomainFinding, type Evidence } from '../../lib/interpret'
+import { describeEvidence, interpret, isShown, isSignificant, type DomainFinding, type Evidence } from '../../lib/interpret'
 import { buildPrismTables, describeSettings, toPzfx } from '../../lib/prism'
 import { dataWarnings, narrative } from '../../lib/report'
 import { outcome, refinements, type Outcome, type Refinement } from '../../lib/refine'
@@ -61,7 +61,7 @@ function Chapter({ index, title, badge, children }: { index: number; title: stri
 export function StoryTab(props: TabProps) {
   const { ds, agg, results, cfg, opt, time, openMeasure, onLearn, measures } = props
   const tr = results.find((r) => r.time === time) ?? results[0]
-  const findings = useMemo(() => (tr ? interpret(tr, cfg, opt).filter((f) => f.supporting.length > 0) : []), [tr, cfg, opt])
+  const findings = useMemo(() => (tr ? interpret(tr, cfg, opt).filter(isShown) : []), [tr, cfg, opt])
   if (!tr) return <p>No results.</p>
 
   const paras = narrative(agg, tr, cfg, opt, findings)
