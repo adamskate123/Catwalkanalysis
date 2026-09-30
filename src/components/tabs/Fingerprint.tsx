@@ -56,7 +56,7 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure, pairIndex 
       const c = x && cellFor(x, find(x), p)
       if (c) cells.push(c)
     }
-    for (const d of ['ASYM_F', 'ASYM_H'] as const) {
+    for (const d of ['ASYM_F', 'ASYM_H', 'HF'] as const) {
       const x = same.find((s) => s.measure.derived === d)
       const c = x && cellFor(x, find(x), d)
       if (c) cells.push(c)
@@ -92,7 +92,7 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure, pairIndex 
         <p className="small muted" style={{ marginTop: 8 }}>
           Each cell is the effect size (Hedges g) for <b>{pair.group}</b> relative to <b>{pair.reference}</b>
           {time ? ` at ${time}` : ''}. Blue = lower, red = higher; darker = larger effect. Stars mark Holm-adjusted p &lt; 0.05 (*), 0.01 (**), 0.001 (***).
-          Tap a cell to open that parameter.{paws ? " Asymmetry columns: positive values mean the left paw's value is higher than the right's." : ''}
+          Tap a cell to open that parameter.{paws ? " Asymmetry columns: positive values mean the left paw's value is higher than the right's. H÷F: hind paws divided by front paws, which corrects for body size (print size and intensity only)." : ''}
         </p>
         <DivergingLegend theme={theme} />
       </div>
@@ -119,6 +119,7 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure, pairIndex 
                 { key: 'RH', label: 'RH' },
                 { key: 'ASYM_F', label: 'Asym F' },
                 { key: 'ASYM_H', label: 'Asym H' },
+                ...(pawRows.some((r) => r.cells.some((c) => c.col === 'HF')) ? [{ key: 'HF', label: 'H÷F' }] : []),
               ]}
               theme={theme}
               svgRef={pawRef}

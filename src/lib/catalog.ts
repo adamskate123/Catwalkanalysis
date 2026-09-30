@@ -22,6 +22,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   kinetic: 'Kinetic / speed parameters',
   coordination: 'Interlimb coordination',
   support: 'Support (paws on the glass)',
+  body_contact: 'Body contact with the glass (dragging)',
   positioning: 'Base of support & paw positioning',
   body: 'Body weight',
   other: 'Other / unrecognised numeric columns',
@@ -36,6 +37,7 @@ export const CATEGORY_ORDER: Category[] = [
   'positioning',
   'coordination',
   'support',
+  'body_contact',
   'body',
   'other',
 ]
@@ -260,6 +262,38 @@ export const PARAMS: ParamDef[] = [
           : undefined,
     }),
   ),
+  // ---- Body contact (non-paw contacts labelled during classification) -------
+  // CatWalk XT reports these only when body parts touching the glass (abdomen,
+  // tail, hips, knees…) are labelled in the run classification. They measure
+  // dragging directly (Timotius et al. 2023, doi:10.3389/fnbeh.2023.1147784).
+  ...(
+    [
+      ['abdomen', 'Abdomen', /^(abdomen|belly)(contact)?$/],
+      ['tail', 'Tail', /^tail(contact)?$/],
+      ['genitalia', 'Genitalia', /^genitalia(contact)?$/],
+      ['nose', 'Nose', /^nose(contact)?$/],
+      ['left_hip', 'Left hip', /^lefthip(contact)?$/],
+      ['right_hip', 'Right hip', /^righthip(contact)?$/],
+      ['left_knee', 'Left knee', /^leftknee(contact)?$/],
+      ['right_knee', 'Right knee', /^rightknee(contact)?$/],
+    ] as const
+  ).map(
+    ([k, name, re]): ParamDef => ({
+      id: `contact_${k}`,
+      label: `${name} contact`,
+      short: `${name} contact`,
+      unit: '%',
+      category: 'body_contact',
+      perPaw: false,
+      match: re,
+      description: `Share of the run in which the ${name.toLowerCase()} touches the glass. Reported only when non-paw contacts are labelled during classification in CatWalk XT.`,
+      up:
+        k === 'nose'
+          ? 'More nose contact: exploring the glass, or a lowered head posture.'
+          : `The ${name.toLowerCase()} touches the glass more: the body is dragged or carried low. A direct sign of dragging and trunk or hind-limb weakness.`,
+      noWeightAdjust: true,
+    }),
+  ),
   // ---- Positioning ------------------------------------------------------------
   {
     id: 'bos_front',
@@ -419,6 +453,21 @@ export const PARAMS: ParamDef[] = [
     description: 'Total floor area contacted by the paw during the entire stance phase.',
     down: 'Paw unloading, weakness, pain or abnormal digit posture; a core deficit after spinal cord injury, stroke or nerve injury.',
     up: 'Flatter placement, heel dragging or heavier animals (print size scales with body weight).',
+  },
+  {
+    id: 'print_elongation',
+    label: 'Print elongation (length ÷ width)',
+    short: 'Elongation',
+    unit: 'ratio',
+    category: 'static',
+    perPaw: true,
+    // Calculated from print length and print width (analysis.ts); not read from a column.
+    match: /^printelongation$/,
+    description:
+      'Print length divided by print width, from each animal\'s mean print length and width. A shape measure that does not scale with paw size or body weight. The hind ÷ front ratio compares the hind paws with the front paws of the same animal.',
+    up: 'Longer, narrower prints: the paw slides or is dragged along the glass during stance, or is placed flat with the heel down. Confirm dragging on the run videos.',
+    down: 'Shorter, wider prints: toe-walking or reduced heel contact.',
+    noWeightAdjust: true,
   },
   {
     id: 'max_intensity_at',

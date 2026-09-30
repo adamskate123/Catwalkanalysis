@@ -90,6 +90,36 @@ export const CATWALK_DOMAINS: Domain[] = [
     ],
   },
   {
+    id: 'dragging',
+    title: 'Hind-paw dragging / poor hind-limb clearance',
+    summary:
+      'Longer, narrower hind prints (or the body touching the glass), with slower hind swing, longer hind stance and shorter strides.',
+    conditions:
+      'Thoracic spinal cord injury and other lesions of descending motor tracts, motor-neuron disease with hind-limb onset (e.g. SOD1-G93A), hereditary spastic paraplegia and leukodystrophies, and distal hind-limb weakness from neuropathy or myopathy.',
+    meaning:
+      "The hind paws are not lifted clear of the glass. A hind print that gets longer without getting wider suggests the paw slides along the glass during stance or is dragged forward, and a rising hind ÷ front ratio shows it is the hind paws that changed. Body contact with the glass (abdomen, tail, hips, knees), which CatWalk XT reports when those contacts are labelled, is the direct measure of dragging. The other markers (slower hind swing, longer stance, shorter strides and a lower regularity index) are consistent CatWalk findings after spinal cord injury but are not specific to dragging. This pattern is therefore shown only when elongation or body contact changed, and it should be confirmed on the run videos.",
+    followUp: [
+      'Review the run videos for toe drag during swing, dorsal stepping and belly or tail contact.',
+      'Label body contacts (abdomen, tail, hips, knees) during classification in CatWalk XT to measure dragging directly.',
+      'Basso Mouse Scale (BMS) for plantar stepping, paw position and trunk stability.',
+      'Hind-limb grip strength and clasping; spinal cord white matter and lumbar motor neurons.',
+    ],
+    items: [
+      { param: 'contact_abdomen', where: 'run', dir: 1, key: true },
+      { param: 'contact_tail', where: 'run', dir: 1, key: true },
+      { param: 'contact_left_hip', where: 'run', dir: 1, key: true },
+      { param: 'contact_right_hip', where: 'run', dir: 1, key: true },
+      { param: 'contact_left_knee', where: 'run', dir: 1, key: true },
+      { param: 'contact_right_knee', where: 'run', dir: 1, key: true },
+      { param: 'print_elongation', where: 'hind', dir: 1, key: true },
+      { param: 'print_elongation', where: 'hindFront', dir: 1, key: true },
+      { param: 'swing_speed', where: 'hind', dir: -1 },
+      { param: 'stand', where: 'hind', dir: 1 },
+      { param: 'stride_length', where: 'hind', dir: -1 },
+      { param: 'regularity_index', where: 'run', dir: -1 },
+    ],
+  },
+  {
     id: 'forelimb',
     title: 'Fore-limb predominant motor deficit',
     summary: 'Front paw prints are smaller or lighter, with altered front-paw timing.',

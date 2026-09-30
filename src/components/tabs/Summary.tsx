@@ -1,7 +1,7 @@
 import { program } from '../../programs'
 import { useMemo, useState } from 'react'
 import { formatNum, formatP, primaryComparison } from '../../lib/analysis'
-import { describeEvidence, interpret, isReported, isSignificant } from '../../lib/interpret'
+import { describeEvidence, interpret, isReported, isShown, isSignificant } from '../../lib/interpret'
 import { dataWarnings, narrative, topChanges, unitNoun } from '../../lib/report'
 import type { TabProps } from './types'
 
@@ -28,8 +28,8 @@ export function Summary(props: TabProps & { goSetup: () => void }) {
     const c = primaryComparison(r, cfg)
     return c && isSignificant(r, c, opt)
   }).length
-  const shown = findings.filter((f) => f.supporting.length > 0)
-  const hidden = findings.filter((f) => f.supporting.length === 0)
+  const shown = findings.filter(isShown)
+  const hidden = findings.filter((f) => !isShown(f))
   const treated = agg.groups.filter((g) => g !== cfg.controlGroup && g !== cfg.diseaseGroup)
   const rescueRows =
     cfg.diseaseGroup && treated.length === 1
