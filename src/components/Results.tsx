@@ -165,7 +165,24 @@ export function Results(props: Props) {
           onDelete={props.onDeleteExperiment}
         />
       )}
-      {tab === 'setup' && <Setup ds={ds} measures={measures} cfg={cfg} setCfg={setCfg} opt={opt} setOpt={setOpt} colorOf={colorOf} onLearn={onLearn} />}
+      {tab === 'setup' && (
+        <Setup
+          ds={ds}
+          measures={measures}
+          cfg={cfg}
+          setCfg={setCfg}
+          opt={opt}
+          setOpt={setOpt}
+          colorOf={colorOf}
+          onLearn={onLearn}
+          onKeyChoice={(file, choice) => {
+            const next = { ...(experiment.keyChoices ?? {}) }
+            if (choice) next[file] = choice
+            else delete next[file]
+            props.onUpdateExperiment({ ...experiment, keyChoices: next })
+          }}
+        />
+      )}
       </div>
     </>
   )

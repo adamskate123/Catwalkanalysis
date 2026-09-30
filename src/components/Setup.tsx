@@ -2,7 +2,7 @@ import { DEFAULT_MAX_VARIATION, combineGroups, isControlLike, distinctValues, gr
 import { CombineGroups } from './CombineGroups'
 import { program } from '../programs'
 import type { InterpretOptions } from '../lib/interpret'
-import type { Dataset } from '../lib/parse'
+import type { Dataset, KeyChoice } from '../lib/parse'
 
 interface Props {
   ds: Dataset
@@ -13,6 +13,8 @@ interface Props {
   setOpt: (o: InterpretOptions) => void
   colorOf: (g: string) => string
   onLearn: (anchor?: string) => void
+  /** Sets (or, with null, clears) a hand-picked animal-key join. */
+  onKeyChoice?: (file: string, choice: KeyChoice | null) => void
 }
 
 function move<T>(arr: T[], i: number, d: number): T[] {
@@ -23,7 +25,7 @@ function move<T>(arr: T[], i: number, d: number): T[] {
   return out
 }
 
-export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn }: Props) {
+export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn, onKeyChoice }: Props) {
   const textCols = ds.columns.filter((c) => c.meta || c.numericShare < 0.8 || c.distinct <= 50).map((c) => c.name)
   const allCols = ds.headers
   const update = (patch: Partial<AnalysisConfig>) => setCfg({ ...cfg, ...patch })
@@ -87,9 +89,62 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
           {ds.keys.map((k) => (
             <div key={k.file} className="small">
               <p style={{ marginBottom: 6 }}>
-                <b>{k.file}</b> was joined on <b>{k.dataColumn}</b> = <b>{k.keyColumn}</b>: {k.matchedIds} animals matched. Added columns:{' '}
+                <b>{k.file}</b> was joined on <b>{k.dataColumn}</b> = <b>{k.keyColumn}</b>
+                {k.auto ? ' (chosen automatically)' : ' (chosen by hand)'}: {k.matchedIds} animals matched
+                {k.fuzzy > 0 ? `, ${k.fuzzy} of them by words rather than identically (e.g. "JAX NM" ↔ "Jax Ctrl NM"), so check them` : ''}. Added columns:{' '}
                 {k.added.join(', ')}.
               </p>
+              {onKeyChoice && (
+                <div className="grid-2" style={{ margin: "8px 0" }}>
+                  <label className="field">
+                    ID column in the data
+                    <select
+                      value={k.dataColumn}
+                      onChange={(e) => onKeyChoice(k.file, { keyColumns: k.keyColumns, dataColumn: e.target.value })}
+                    >
+                      {[...new Set([k.dataColumn, ...k.dataOptions])].map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    ID column in the key
+                    <select
+                      value={k.keyColumns[0]}
+                      onChange={(e) => onKeyChoice(k.file, { keyColumns: [e.target.value, ...k.keyColumns.slice(1).filter((c) => c !== e.target.value)], dataColumn: k.dataColumn })}
+                    >
+                      {[...new Set([...k.keyColumns.slice(0, 1), ...k.keyOptions])].map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    …combined with (optional)
+                    <select
+                      value={k.keyColumns[1] ?? ''}
+                      onChange={(e) => onKeyChoice(k.file, { keyColumns: e.target.value ? [k.keyColumns[0], e.target.value] : [k.keyColumns[0]], dataColumn: k.dataColumn })}
+                    >
+                      <option value="">— none —</option>
+                      {k.keyOptions
+                        .filter((c) => c !== k.keyColumns[0])
+                        .map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+              {onKeyChoice && !k.auto && (
+                <button className="btn sm" onClick={() => onKeyChoice(k.file, null)}>
+                  Choose automatically again
+                </button>
+              )}
               {k.unmatchedData.length > 0 && <p className="muted">No key entry for: {k.unmatchedData.join(', ')}.</p>}
               {k.unusedKeyIds.length > 0 && <p className="muted">Key entries not found in the data: {k.unusedKeyIds.join(', ')}.</p>}
               {k.notes.length > 0 && (

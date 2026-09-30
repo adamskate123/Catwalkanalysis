@@ -3,7 +3,7 @@
 
 import { distinctValues, groupList, naturalCompare, type AnalysisConfig, autoConfig } from './analysis'
 import type { InterpretOptions } from './interpret'
-import { isKeyTable, type Dataset, type ParsedTable } from './parse'
+import { isKeyTable, type Dataset, type KeyChoice, type ParsedTable } from './parse'
 import type { ProgramId } from '../programs'
 
 export const SESSION_COL = 'Session'
@@ -29,6 +29,8 @@ export interface Experiment {
   files: StoredFile[]
   cfg?: AnalysisConfig
   opt?: InterpretOptions
+  /** Animal-key joins picked by hand (Setup → Animal key), by key file label. */
+  keyChoices?: Record<string, KeyChoice>
   notes?: string
   appVersion: string
 }
