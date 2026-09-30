@@ -229,6 +229,15 @@ export interface KeyJoin {
   unmatchedData: string[]
   unusedKeyIds: string[]
   notes: string[]
+  /** Key columns combined into the ID (one, or e.g. Tag Number + Toe/Ear Mark). */
+  keyColumns: string[]
+  /** False when the join was picked by hand in Setup. */
+  auto: boolean
+  /** IDs matched by words rather than identically ("JAX NM" ↔ "Jax Ctrl NM"). */
+  fuzzy: number
+  /** Text columns the join could use, for choosing by hand. */
+  keyOptions: string[]
+  dataOptions: string[]
 }
 
 export interface Dataset {
@@ -295,7 +304,7 @@ const norm = (c: Cell) => (c === null ? '' : String(c).trim().toLowerCase().repl
 const isTrialLevel = (t: ParsedTable) => t.headers.some((h) => metaRole(h) === 'nruns')
 const isRunLevel = (t: ParsedTable) => t.headers.some((h) => metaRole(h) === 'run')
 
-export function mergeTables(all: ParsedTable[]): Dataset {
+export function mergeTables(all: ParsedTable[], opts: MergeOptions = {}): Dataset {
   const notices: string[] = []
   // Body-weight tables are joined onto the other data as a covariate when there are other data.
   const weightOnly = all.filter(isWeightTable)
@@ -384,13 +393,28 @@ export function mergeTables(all: ParsedTable[]): Dataset {
 
   const keys: KeyJoin[] = []
   const keyCols = new Set<string>()
+  let keyWeights: Cell[] | null = null
+  let keyWeightFile = ''
   for (const kt of mergeKeyTables(keyTables)) {
-    const j = joinKey(headers, rows, kt)
+    const label = kt.sheet ? `${kt.file} › ${kt.sheet}` : kt.file
+    const j = joinKey(headers, rows, kt, opts.keyChoices?.[label], !weightTables.length && !keyWeights && !headers.includes(WEIGHT_COL))
     if (!j) continue
     keys.push(j.info)
     for (const h of j.info.added) keyCols.add(h)
     headers.push(...j.info.added)
     rows.forEach((r, i) => r.push(...j.values[i]))
+    if (j.weights) {
+      keyWeights = j.weights
+      keyWeightFile = j.info.file
+    }
+  }
+  if (keyWeights) {
+    headers.push(WEIGHT_COL)
+    rows.forEach((r, i) => r.push(keyWeights![i]))
+    const n = keyWeights.filter((w) => w !== null).length
+    notices.push(
+      `Body weight from ${keyWeightFile} was added to ${n} of ${rows.length} runs, using each animal's weigh-in nearest the test date (within ${WEIGH_WINDOW_DAYS} days).${n < rows.length ? ` ${rows.length - n} runs had no weigh-in that close; log a weight for those test days to include them.` : ''} Weight appears as a parameter and can be used as a covariate (Setup → Statistics).`,
+    )
   }
   if (weightTables.length) {
     const w = joinWeights(headers, rows, weightTables)
@@ -515,58 +539,218 @@ function mergeKeyTables(tables: ParsedTable[]): ParsedTable[] {
   return [{ file: tables.map((t) => t.file).filter((f, i, a) => a.indexOf(f) === i).join(' + '), sheet: '', headerRow: 0, headers, rows }]
 }
 
+/** A key column (or combination of columns) chosen by hand in Setup → Animal key. */
+export interface KeyChoice {
+  keyColumns: string[]
+  dataColumn: string
+}
+
+export interface MergeOptions {
+  /** Hand-picked joins, by key file label (KeyJoin.file). */
+  keyChoices?: Record<string, KeyChoice>
+}
+
+const tokens = (s: string) => s.split(/[\s_\-/,;:]+/).filter(Boolean)
+
+/** Share of non-empty cells that are numbers. */
+function numericShareOf(values: Cell[]): number {
+  const filled = values.filter((c) => c !== null && String(c).trim() !== '')
+  return filled.length ? filled.filter((c) => toNumber(c) !== null).length / filled.length : 0
+}
+
+/** "2026-09-24", "9/24/2026" or "24.09.2026" → UTC day number; null for anything else. */
+export function parseDay(c: Cell): number | null {
+  if (c === null) return null
+  const s = String(c).trim()
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/.exec(s)
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3]) / 864e5
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s)
+  if (m) return Date.UTC(+m[3], +m[1] - 1, +m[2]) / 864e5
+  m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s)
+  if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1]) / 864e5
+  return null
+}
+
+/** Days a weigh-in may lie from the test date and still be used. */
+export const WEIGH_WINDOW_DAYS = 7
+export const AGE_AT_TEST_COL = 'Age at test (d)'
+
 /**
- * Joins a key table to the data by the (key column, data column) pair whose
- * values overlap most, e.g. "CatWalk trial name" ↔ "Trial".
+ * Joins a key table to the data through an ID. Only text columns take part:
+ * numeric columns (counts, weights) can overlap by chance and would join the
+ * wrong animals. The key ID may combine two columns (e.g. Tag Number + Toe/Ear
+ * Mark → "KX9.1 LF"), and an ID matches when it is identical or when all of
+ * the data ID's words appear in exactly one key entry ("JAX NM" ↔ "Jax Ctrl NM").
+ * A weekly weight log (date-headed columns) supplies the weigh-in nearest each
+ * test date instead of every weekly column, and a DOB column gives the age at test.
  */
-function joinKey(headers: string[], rows: Cell[][], kt: ParsedTable): { info: KeyJoin; values: Cell[][] } | null {
-  let best: { kc: number; dc: number; hits: number } | null = null
-  for (let kc = 0; kc < kt.headers.length; kc++) {
-    const kv = new Set(kt.rows.map((r) => norm(r[kc])).filter(Boolean))
-    if (kv.size < 3) continue
-    for (let dc = 0; dc < headers.length; dc++) {
-      const dv = new Set(rows.map((r) => norm(r[dc])).filter(Boolean))
-      let hits = 0
-      for (const v of dv) if (kv.has(v)) hits++
-      if (hits >= 2 && (!best || hits > best.hits)) best = { kc, dc, hits }
+function joinKey(
+  headers: string[],
+  rows: Cell[][],
+  kt: ParsedTable,
+  choice?: KeyChoice,
+  allowWeight = true,
+): { info: KeyJoin; values: Cell[][]; weights: Cell[] | null } | null {
+  const file = kt.sheet ? `${kt.file} › ${kt.sheet}` : kt.file
+  const keyText = kt.headers
+    .map((h, i) => ({ h, i }))
+    .filter(({ i }) => {
+      const vals = kt.rows.map((r) => r[i])
+      return numericShareOf(vals) < 0.5 && parseDayShare(vals) < 0.5 && new Set(vals.map(norm).filter(Boolean)).size >= 2
+    })
+    .map(({ i }) => i)
+  const dataText = headers
+    .map((h, i) => ({ h, i }))
+    .filter(({ h, i }) => {
+      if (h === SOURCE_COL) return false
+      const role = metaRole(h)
+      if (!role && matchColumn(h)) return false
+      if (role === 'equipment' || role === 'time' || role === 'nruns' || role === 'run') return false
+      const vals = rows.map((r) => r[i])
+      return numericShareOf(vals) < 0.5 && new Set(vals.map(norm).filter(Boolean)).size >= 2
+    })
+    .map(({ i }) => i)
+
+  const idOf = (r: Cell[], cols: number[]) => norm(cols.map((c) => (r[c] === null ? '' : String(r[c]))).join(' '))
+  const evaluate = (kcs: number[], dc: number) => {
+    // Free-text rows below the table (e.g. "Notes", then a sentence) are notes, not animals.
+    const entries = kt.rows
+      .map((r, ri) => ({ ri, id: idOf(r, kcs) }))
+      .filter((e) => e.id && kcs.every((c) => kt.rows[e.ri][c] !== null) && kt.rows[e.ri].filter((c) => c !== null).length > 1)
+    const exact = new Map<string, number>()
+    for (const e of entries) exact.set(e.id, e.ri)
+    const map = new Map<string, number>()
+    let exactHits = 0
+    let fuzzyHits = 0
+    for (const v of new Set(rows.map((r) => norm(r[dc])).filter(Boolean))) {
+      if (exact.has(v)) {
+        map.set(v, exact.get(v)!)
+        exactHits++
+        continue
+      }
+      const want = tokens(v)
+      const found = entries.filter((e) => {
+        const have = tokens(e.id)
+        return want.every((w) => have.includes(w))
+      })
+      if (want.length && found.length === 1) {
+        map.set(v, found[0].ri)
+        fuzzyHits++
+      }
+    }
+    return { map, exactHits, fuzzyHits, hits: exactHits + fuzzyHits }
+  }
+
+  type Best = { kcs: number[]; dc: number; map: Map<string, number>; exactHits: number; fuzzyHits: number; hits: number }
+  let best: Best | null = null
+  let auto = true
+  if (choice) {
+    const kcs = choice.keyColumns.map((h) => kt.headers.indexOf(h))
+    const dc = headers.indexOf(choice.dataColumn)
+    if (kcs.length && kcs.every((i) => i >= 0) && dc >= 0) {
+      best = { kcs, dc, ...evaluate(kcs, dc) }
+      auto = false
+    }
+  }
+  if (!best) {
+    const combos: number[][] = keyText.map((i) => [i])
+    for (const a of keyText) for (const b of keyText) if (a !== b) combos.push([a, b])
+    for (const kcs of combos) {
+      for (const dc of dataText) {
+        const r = evaluate(kcs, dc)
+        if (r.hits < 2) continue
+        const better =
+          !best ||
+          r.hits > best.hits ||
+          (r.hits === best.hits && (r.exactHits > best.exactHits || (r.exactHits === best.exactHits && kcs.length < best.kcs.length)))
+        if (better) best = { kcs, dc, ...r }
+      }
     }
   }
   if (!best) return null
-  const { kc, dc } = best
-  const lookup = new Map<string, Cell[]>()
+  const { kcs, dc, map } = best
+
+  // Weekly weight log: date-headed numeric columns.
+  const looksWeight = /weigh|\bwt\b|body ?mass/i.test(`${kt.file} ${kt.sheet} ${kt.headers.join(' ')}`)
+  const dateCols = kt.headers
+    .map((h, i) => ({ h, i, day: parseDay(h) }))
+    .filter(({ i, day }) => day !== null && numericShareOf(kt.rows.map((r) => r[i])) >= 0.9 && kt.rows.some((r) => r[i] !== null))
+  const weightLog = allowWeight && looksWeight && dateCols.length >= 2
+  const timeIdx = headers.findIndex((h) => metaRole(h) === 'time' && !/description/i.test(h))
+  const dayOf = (r: Cell[]) => (timeIdx >= 0 ? parseDay(r[timeIdx]) : null)
+  const dobIdx = kt.headers.findIndex((h) => /^(dob|d\.o\.b\.?|date of birth|birth ?date)$/i.test(h.trim()))
+
   const notes: string[] = []
   for (const r of kt.rows) {
-    const k = norm(r[kc])
     const filled = r.filter((c) => c !== null)
-    // Later rows win, so an updated key overrides an older one.
-    if (k && filled.length > 1) lookup.set(k, r)
-    // Free-text rows below the table (e.g. "Notes", then sentences) are kept as notes.
-    else if (filled.length === 1 && typeof filled[0] === 'string' && filled[0].length > 20) notes.push(filled[0])
+    if (filled.length === 1 && typeof filled[0] === 'string' && filled[0].length > 20) notes.push(filled[0])
   }
-  const cols = kt.headers.map((h, i) => ({ h, i })).filter(({ i }) => i !== kc && kt.rows.some((r) => r[i] !== null))
-  const added = cols.map(({ h }) => (headers.includes(h) ? `${h} (key)` : h))
+  const skip = new Set<number>([...kcs.length === 1 ? kcs : [], ...(weightLog ? dateCols.map((d) => d.i) : [])])
+  const cols = kt.headers.map((h, i) => ({ h, i })).filter(({ i }) => !skip.has(i) && kt.rows.some((r) => r[i] !== null))
+  const canAge = dobIdx >= 0 && rows.some((r) => dayOf(r) !== null)
+  const added = [...(canAge ? [AGE_AT_TEST_COL] : []), ...cols.map(({ h }) => (headers.includes(h) ? `${h} (key)` : h))]
   const dataIds = new Set<string>()
   const unmatched = new Set<string>()
+  let weighed = 0
+  const weights: Cell[] = []
   const values = rows.map((r) => {
     const id = norm(r[dc])
-    const k = lookup.get(id)
+    const ri = map.get(id)
+    const k = ri === undefined ? undefined : kt.rows[ri]
     if (id) (k ? dataIds : unmatched).add(String(r[dc]))
-    return cols.map(({ i }) => (k ? k[i] : null))
+    const day = dayOf(r)
+    if (weightLog) {
+      let w: Cell = null
+      if (k && day !== null) {
+        let bestD = Infinity
+        for (const d of dateCols) {
+          const v = toNumber(k[d.i])
+          if (v === null) continue
+          const dist = Math.abs(d.day! - day)
+          // On a tie, the earlier weigh-in (before the test) wins.
+          if (dist <= WEIGH_WINDOW_DAYS && (dist < bestD || (dist === bestD && d.day! < day))) {
+            bestD = dist
+            w = v
+          }
+        }
+        if (w !== null) weighed++
+      }
+      weights.push(w)
+    }
+    const age: Cell[] = canAge ? [k && day !== null && parseDay(k[dobIdx]) !== null ? day - parseDay(k[dobIdx])! : null] : []
+    return [...age, ...cols.map(({ i }) => (k ? k[i] : null))]
   })
-  const matchedKeys = new Set([...dataIds].map((d) => norm(d)))
+  if (weightLog && (timeIdx < 0 || !rows.some((r) => dayOf(r) !== null)))
+    notes.push('This is a weekly weight log, but the data have no test dates (Time_Point), so weights could not be matched to a test day.')
+  if (canAge) notes.push(`${AGE_AT_TEST_COL} is calculated from DOB and the test date, not from ages stored in the key (those change with the date the file was opened).`)
+  const matchedRows = new Set(map.values())
   return {
     info: {
-      file: kt.sheet ? `${kt.file} › ${kt.sheet}` : kt.file,
-      keyColumn: kt.headers[kc],
+      file,
+      keyColumn: kcs.map((c) => kt.headers[c]).join(' + '),
+      keyColumns: kcs.map((c) => kt.headers[c]),
       dataColumn: headers[dc],
       added,
       matchedIds: dataIds.size,
       unmatchedData: [...unmatched],
-      unusedKeyIds: [...lookup.keys()].filter((k) => !matchedKeys.has(k)).map((k) => String(lookup.get(k)![kc])),
+      unusedKeyIds: kt.rows
+        .map((r, ri) => ({ r, ri }))
+        .filter(({ r, ri }) => !matchedRows.has(ri) && kcs.every((c) => r[c] !== null) && r.filter((c) => c !== null).length > 1)
+        .map(({ r }) => kcs.map((c) => String(r[c])).join(' ')),
       notes,
+      auto,
+      fuzzy: best.fuzzyHits,
+      keyOptions: keyText.map((i) => kt.headers[i]),
+      dataOptions: dataText.map((i) => headers[i]),
     },
     values,
+    weights: weightLog && weighed ? weights : null,
   }
+}
+
+function parseDayShare(values: Cell[]): number {
+  const filled = values.filter((c) => c !== null)
+  return filled.length ? filled.filter((c) => parseDay(c) !== null).length / filled.length : 0
 }
 
 export function classifyColumns(headers: string[], rows: Cell[][], keyCols: Set<string> = new Set()): ColumnInfo[] {

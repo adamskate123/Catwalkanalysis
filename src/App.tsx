@@ -111,7 +111,8 @@ export default function App() {
   useEffect(refreshLibrary, [refreshLibrary])
 
   const tables = useMemo(() => (experiment ? experimentTables(experiment) : null), [experiment])
-  const ds = useMemo(() => (tables ? mergeTables(tables) : null), [tables])
+  const keyChoices = experiment?.keyChoices
+  const ds = useMemo(() => (tables ? mergeTables(tables, { keyChoices }) : null), [tables, keyChoices])
   const measures = useMemo(() => (ds ? buildMeasures(ds) : []), [ds])
   const agg = useMemo(() => (ds && cfg ? aggregate(ds, measures, cfg) : null), [ds, measures, cfg])
   const results = useMemo(() => (agg && cfg ? analyse(agg, measures, cfg) : null), [agg, measures, cfg])
@@ -137,7 +138,7 @@ export default function App() {
 
   const openExperiment = (e: Experiment, persistNow = false) => {
     activate(e.program ?? 'catwalk')
-    const ds0 = mergeTables(experimentTables(e))
+    const ds0 = mergeTables(experimentTables(e), { keyChoices: e.keyChoices })
     const cfg0 = reconcileConfig(e.cfg, ds0)
     setExperiment(e)
     setCfg(cfg0)
@@ -176,7 +177,7 @@ export default function App() {
     if (!experiment || !ds || !cfg) return ''
     const before = aggregate(ds, measures, cfg)
     const next: Experiment = { ...experiment, files: [...experiment.files, ...toStored(files, session)], updatedAt: new Date().toISOString() }
-    const ds2 = mergeTables(experimentTables(next))
+    const ds2 = mergeTables(experimentTables(next), { keyChoices: next.keyChoices })
     const cfg2 = reconcileConfig(cfg, ds2)
     const after = aggregate(ds2, buildMeasures(ds2), cfg2)
     setSaveState('saving')
@@ -202,7 +203,7 @@ export default function App() {
 
   const updateExperiment = (e: Experiment) => {
     setSaveState('saving')
-    const ds2 = mergeTables(experimentTables(e))
+    const ds2 = mergeTables(experimentTables(e), { keyChoices: e.keyChoices })
     setExperiment({ ...e, updatedAt: new Date().toISOString() })
     setCfg((c) => reconcileConfig(c ?? undefined, ds2))
   }

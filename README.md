@@ -1,6 +1,6 @@
 # Behavior Lab · Gait, Rotarod, Open Field, Cage Hang
 
-**Version 2.5.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 2.5.1**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
 A web app that turns rodent behavioural data into structured graphs, statistics and a written phenotype summary, with a built-in tutorial for each test. It contains four programs; switch between them by clicking the name and icon at the top left:
 

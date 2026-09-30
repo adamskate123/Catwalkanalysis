@@ -312,6 +312,9 @@ function controlsFromGroupType(ds: Dataset, groupCol: string | null): string[] {
   return [...out]
 }
 
+/** Run duration range (s) a compliant run must fall in, with speed variation at or under the run-quality threshold. */
+export const COMPLIANT_DURATION: [number, number] = [0.5, 5]
+
 export function autoConfig(ds: Dataset): AnalysisConfig {
   const find = (role: string) => ds.columns.find((c) => c.meta === role)?.name ?? null
   let subjectCol = find('subject') ?? find('trial')
@@ -369,6 +372,10 @@ export interface Subject {
   group: string
   time: string
   nRuns: number
+  /** Runs meeting the compliance definition (see COMPLIANT_DURATION); undefined without a speed-variation column. */
+  nCompliant?: number
+  /** Runs recorded for this animal-timepoint before any run-quality filter. */
+  nRunsRecorded?: number
   sex?: string
   age?: number
   values: Record<string, number>
@@ -435,8 +442,11 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     age?: number
     order: number
     trial: string
+    compliant?: boolean
   }
   const rows: Row[] = []
+  const durM = measures.find((m) => m.def.id === 'run_duration' && m.col !== undefined)
+  const recorded = new Map<string, number>()
   let nonCompliant = 0
   let highVar = 0
   let filtered = 0
@@ -444,6 +454,13 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
   ds.rows.forEach((r, idx) => {
     const variation = varM ? toNumber(r[varM.col!]) : null
     if (variation !== null && variation > DEFAULT_MAX_VARIATION && nri < 0) aboveDefault++
+    const duration = durM ? toNumber(r[durM.col!]) : null
+    const compliant =
+      varM && nri < 0
+        ? variation !== null &&
+          variation <= (cfg.maxVariation ?? DEFAULT_MAX_VARIATION) &&
+          (duration === null || (duration >= COMPLIANT_DURATION[0] && duration <= COMPLIANT_DURATION[1]))
+        : undefined
     if (ci >= 0 && cfg.onlyCompliant && !isCompliant(r[ci])) {
       nonCompliant++
       return
@@ -451,6 +468,11 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
     if (filters.some((f) => !f.values.has(cellText(r[f.i])))) {
       filtered++
       return
+    }
+    if (compliant !== undefined) {
+      const g0 = gi >= 0 ? groupOf(cfg, cellText(r[gi])) : NO_GROUP
+      const k0 = `${si >= 0 ? cellText(r[si]) || `row ${idx + 1}` : `row ${idx + 1}`}\u0000${g0}\u0000${ti >= 0 ? cellText(r[ti]) : ''}\u0000${sexi >= 0 ? cellText(r[sexi]) : ''}`
+      recorded.set(k0, (recorded.get(k0) ?? 0) + 1)
     }
     // Only meaningful for run-level rows; trial statistics already average runs.
     if (cfg.maxVariation !== null && nri < 0 && variation !== null && variation > cfg.maxVariation) {
@@ -474,6 +496,7 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       age: agei >= 0 ? (toNumber(r[agei]) ?? undefined) : undefined,
       order: runi >= 0 ? runOrder(r[runi], idx) : idx,
       trial: triali >= 0 ? cellText(r[triali]) : '',
+      compliant,
     })
   })
 
@@ -519,6 +542,8 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       time: arr[0].time,
       // Trial-statistics exports carry the run count in their own column.
       nRuns: arr.reduce((n, r) => n + r.nRuns, 0),
+      nCompliant: arr.some((r) => r.compliant !== undefined) ? arr.filter((r) => r.compliant).length : undefined,
+      nRunsRecorded: recorded.get(`${arr[0].subject}\u0000${arr[0].group}\u0000${arr[0].time}\u0000${arr[0].sex ?? ''}`),
       sex: arr[0].sex,
       age: arr[0].age,
       values,

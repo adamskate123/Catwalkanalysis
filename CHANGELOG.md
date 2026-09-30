@@ -3,6 +3,22 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.5.1] - 2026-09-30
+
+Tested with a real CatWalk XT run-statistics export (two test dates) and a weekly colony weight log.
+
+### Fixed
+
+- **Animal keys no longer join on numbers that happen to overlap.** The key join only considers text ID columns. Previously a weight log could be joined on its *Weigh-ins (n)* count against CatWalk's *StepSequence_NumberOfPatterns*, which attached the wrong sex and genotype to runs and split one animal into several.
+- **Compliant-run warning counts animal-timepoints correctly** and says what it counted: runs with speed variation at or under the run-quality threshold (60% by default) and a duration of 0.5–5 s. It lists each animal-timepoint that falls short, e.g. "KX9.2 LFLR @ 9/30/2026: 0 of 4". It no longer counts every run as compliant when the run-quality filter is off.
+
+### Added
+
+- **Two-column animal IDs and word matching.** The key ID can combine two columns (e.g. Tag Number + Toe/Ear Mark → "KX9.1 LF"), and an ID matches when all of its words appear in exactly one key entry ("JAX NM" ↔ "Jax Ctrl" + "NM"). Setup → Animal key says how many IDs were matched by words so they can be checked.
+- **Pick the join by hand** under Setup → Animal key: the ID column in the data, the ID column in the key and an optional second key column. The choice is saved with the experiment; *Choose automatically again* undoes it.
+- **Weekly weight logs** (date-headed weight columns) supply the weigh-in nearest each test date, within 7 days, as *Body weight (g)*, instead of adding every weekly column. Runs with no weigh-in that close are counted in a notice.
+- **Age at test (d)** is calculated from a DOB column and the test date, rather than using ages stored in the key, which depend on the day the spreadsheet was opened.
+
 ## [2.5.0] - 2026-09-29
 
 ### Added

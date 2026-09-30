@@ -1,5 +1,5 @@
 import { program } from '../programs'
-import { DEFAULT_MAX_VARIATION } from './analysis'
+import { COMPLIANT_DURATION, DEFAULT_MAX_VARIATION } from './analysis'
 import { toNumber } from './parse'
 import type { Dataset } from './parse'
 import {
@@ -55,7 +55,10 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
       })
     for (const k of ds.keys) {
       if (k.unmatchedData.length)
-        w.push({ level: 'warning', text: `Animal key ${k.file}: no entry for ${k.unmatchedData.join(', ')} (matched on ${k.dataColumn} = ${k.keyColumn}).` })
+        w.push({
+          level: 'warning',
+          text: `Animal key ${k.file}: no entry for ${k.unmatchedData.join(', ')} (matched on ${k.dataColumn} = ${k.keyColumn}). Check the join, or pick the ID columns by hand, under Setup → Animal key.`,
+        })
       for (const n of k.notes) w.push({ level: 'info', text: `Note from ${k.file}: ${n}` })
     }
   }
@@ -124,14 +127,24 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
   }
   // Minimum-trials advice applies to repeated trials of one test (runs, rotarod trials), not to intervals of a session.
   const repeated = program().features.speed || (Boolean(program().trialDerived?.length) && agg.trials.length > 0)
-  if (repeated && agg.subjects.some((s) => s.nRuns < 3) && cfg.subjectCol) {
-    const k = agg.subjects.filter((s) => s.nRuns < 3).length
-    w.push({
-      level: 'info',
-      text: program().features.speed
-        ? `${k} animal-timepoint(s) have fewer than 3 compliant runs. Noldus and most labs recommend at least 3 compliant runs per animal.`
-        : `${k} animal-timepoint(s) have fewer than 3 ${program().runsNoun}. Most protocols average at least 3 ${program().runsNoun} per animal per session.`,
-    })
+  if (repeated && cfg.subjectCol) {
+    const counted = agg.subjects.map((s) => ({ s, n: s.nCompliant ?? s.nRuns }))
+    const short = counted.filter((x) => x.n < 3)
+    if (short.length) {
+      const byCompliance = agg.subjects.some((s) => s.nCompliant !== undefined)
+      const multiTime = new Set(agg.subjects.map((s) => s.time)).size > 1
+      const label = (x: (typeof counted)[number]) =>
+        `${x.s.id}${multiTime && x.s.time ? ` @ ${x.s.time}` : ''}: ${x.n}${x.s.nRunsRecorded !== undefined ? ` of ${x.s.nRunsRecorded}` : ''}`
+      const sorted = [...short].sort((a, b) => a.n - b.n || a.s.id.localeCompare(b.s.id))
+      const list = sorted.slice(0, 20).map(label).join('; ') + (sorted.length > 20 ? `; and ${sorted.length - 20} more` : '')
+      const threshold = cfg.maxVariation ?? DEFAULT_MAX_VARIATION
+      w.push({
+        level: 'info',
+        text: program().features.speed
+          ? `${short.length} of ${counted.length} animal-timepoints have fewer than 3 compliant runs${byCompliance ? ` (compliant = speed variation ≤ ${threshold}% and duration ${COMPLIANT_DURATION[0]}–${COMPLIANT_DURATION[1]} s)` : ''}: ${list}. Noldus and most labs recommend at least 3 compliant runs per animal.`
+          : `${short.length} of ${counted.length} animal-timepoints have fewer than 3 ${program().runsNoun}: ${list}. Most protocols average at least 3 ${program().runsNoun} per animal per session.`,
+      })
+    }
   }
   return w
 }
