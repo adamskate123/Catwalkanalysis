@@ -96,6 +96,8 @@ function isDark(hex: string): boolean {
 
 /** Group legend items drawn as HTML next to a chart (see charts/common.tsx Legend). */
 function legendItems(svg: SVGSVGElement): { label: string; color: string }[] {
+  // Charts without an HTML legend (dot plots) carry their groups in data-legend.
+  if (svg.dataset.legend) return JSON.parse(svg.dataset.legend) as { label: string; color: string }[]
   const list = svg.parentElement?.querySelector(':scope > .legend')
   if (!list) return []
   return [...list.querySelectorAll('li')].map((li) => ({
@@ -104,9 +106,38 @@ function legendItems(svg: SVGSVGElement): { label: string; color: string }[] {
   }))
 }
 
+const GENERIC_TITLE = /^(dot plot|time course|effect-size heatmap)$/i
+
+/** The chart's title: its own name, the title of the card it sits in, or its label. */
+function titleOf(svg: SVGSVGElement): string {
+  if (svg.dataset.chartName) return svg.dataset.chartName
+  const card = svg.closest('.card')
+  const heading = card?.querySelector('h3, h2')?.textContent?.trim()
+  const aria = svg.getAttribute('aria-label') ?? ''
+  // A scatter's label ("Y versus X") says more than a generic card heading.
+  if (aria && !GENERIC_TITLE.test(aria) && (!heading || /\bvs\b|versus|per animal/i.test(heading))) return aria
+  return heading || (GENERIC_TITLE.test(aria) ? '' : aria)
+}
+
+/** Splits text into lines of at most `chars` characters, at spaces. */
+function wrapText(text: string, chars: number): string[] {
+  const out: string[] = []
+  let cur = ''
+  for (const word of text.split(/\s+/)) {
+    if (cur && (cur + ' ' + word).length > chars) {
+      out.push(cur)
+      cur = word
+    } else cur = cur ? `${cur} ${word}` : word
+  }
+  if (cur) out.push(cur)
+  return out
+}
+
 /**
- * A standalone copy of a chart: hit targets removed, and the HTML legend (groups)
- * or the heatmap colour scale drawn into the SVG so the file makes sense on its own.
+ * A standalone copy of a chart for export: hit targets removed, and a title,
+ * the timepoint, the group legend, the heatmap colour scale and a caption drawn
+ * into the image, so a file makes sense on its own (on screen these sit in the
+ * surrounding card).
  */
 function standalone(svg: SVGSVGElement): SVGSVGElement {
   const clone = svg.cloneNode(true) as SVGSVGElement
@@ -117,9 +148,18 @@ function standalone(svg: SVGSVGElement): SVGSVGElement {
   const h = Number(svg.getAttribute('height'))
   const bg = svg.querySelector('rect')?.getAttribute('fill') ?? '#ffffff'
   const ink = isDark(bg) ? '#ffffff' : '#333333'
+  const muted = isDark(bg) ? '#c3c2b7' : '#666666'
   const items = legendItems(svg)
   const scale = svg.dataset.scale ? (JSON.parse(svg.dataset.scale) as string[]) : null
-  if (!items.length && !scale) return clone
+  const title = titleOf(svg)
+  const time = svg.closest<HTMLElement>('[data-chart-time]')?.dataset.chartTime ?? ''
+  const note = svg.dataset.chartNote ?? ''
+
+  // Header: title (bold) and timepoint, wrapped to the chart width.
+  const head: { text: string; size: number; bold?: boolean; color: string }[] = []
+  for (const line of wrapText(title, Math.floor((w - 20) / 8))) head.push({ text: line, size: 14, bold: true, color: ink })
+  if (time) head.push({ text: time, size: 11.5, color: muted })
+  const headH = head.reduce((n, l) => n + l.size + 5, 0) + (head.length ? 6 : 0)
 
   // Legend rows: wrap items across the chart width.
   const rows: { label: string; color: string; x: number }[][] = []
@@ -133,15 +173,26 @@ function standalone(svg: SVGSVGElement): SVGSVGElement {
     rows[rows.length - 1].push({ ...it, x })
     x += iw
   }
-  const top = rows.length * 18 + (rows.length ? 6 : 0)
-  const bottom = scale ? 40 : 0
-  const out = svgEl('svg', { xmlns: SVG_NS, width: w, height: h + top + bottom, viewBox: `0 0 ${w} ${h + top + bottom}`, 'font-family': FONT }) as SVGSVGElement
-  out.appendChild(svgEl('rect', { width: w, height: h + top + bottom, fill: bg }))
+  const legendH = rows.length * 18 + (rows.length ? 6 : 0)
+  const top = headH + legendH
+  const scaleH = scale ? 40 : 0
+  const caption = note ? wrapText(note, Math.floor((w - 20) / 5.6)) : []
+  const captionH = caption.length ? caption.length * 14 + 10 : 0
+  const total = top + h + scaleH + captionH
+
+  const out = svgEl('svg', { xmlns: SVG_NS, width: w, height: total, viewBox: `0 0 ${w} ${total}`, 'font-family': FONT }) as SVGSVGElement
+  out.appendChild(svgEl('rect', { width: w, height: total, fill: bg }))
+  let y = 6
+  for (const l of head) {
+    y += l.size
+    out.appendChild(svgEl('text', { x: 10, y, 'font-size': l.size, ...(l.bold ? { 'font-weight': 700 } : {}), fill: l.color }, l.text))
+    y += 5
+  }
   rows.forEach((row, ri) => {
     for (const it of row) {
-      const y = 6 + ri * 18
-      out.appendChild(svgEl('rect', { x: it.x, y: y + 2, width: 11, height: 11, rx: 2, fill: it.color }))
-      out.appendChild(svgEl('text', { x: it.x + 16, y: y + 11, 'font-size': 11, fill: ink }, it.label))
+      const ry = headH + 4 + ri * 18
+      out.appendChild(svgEl('rect', { x: it.x, y: ry + 2, width: 11, height: 11, rx: 2, fill: it.color }))
+      out.appendChild(svgEl('text', { x: it.x + 16, y: ry + 11, 'font-size': 11, fill: ink }, it.label))
     }
   })
   const inner = svgEl('g', { transform: `translate(0 ${top})` })
@@ -150,15 +201,16 @@ function standalone(svg: SVGSVGElement): SVGSVGElement {
   out.appendChild(inner)
   if (scale) {
     // Colour bar with its labels underneath, so it fits even a narrow heatmap.
-    const y = top + h + 6
+    const sy = top + h + 6
     const cw = Math.min(16, (w - 20) / scale.length)
     const x0 = (w - scale.length * cw) / 2
     const x1 = x0 + scale.length * cw
-    scale.forEach((c, i) => out.appendChild(svgEl('rect', { x: x0 + i * cw, y, width: cw, height: 12, fill: c })))
-    out.appendChild(svgEl('text', { x: x0, y: y + 25, 'font-size': 10, fill: ink }, 'Lower'))
-    out.appendChild(svgEl('text', { x: (x0 + x1) / 2, y: y + 25, 'text-anchor': 'middle', 'font-size': 10, fill: ink }, 'Hedges g'))
-    out.appendChild(svgEl('text', { x: x1, y: y + 25, 'text-anchor': 'end', 'font-size': 10, fill: ink }, 'Higher'))
+    scale.forEach((c, i) => out.appendChild(svgEl('rect', { x: x0 + i * cw, y: sy, width: cw, height: 12, fill: c })))
+    out.appendChild(svgEl('text', { x: x0, y: sy + 25, 'font-size': 10, fill: ink }, 'Lower'))
+    out.appendChild(svgEl('text', { x: (x0 + x1) / 2, y: sy + 25, 'text-anchor': 'middle', 'font-size': 10, fill: ink }, 'Hedges g'))
+    out.appendChild(svgEl('text', { x: x1, y: sy + 25, 'text-anchor': 'end', 'font-size': 10, fill: ink }, 'Higher'))
   }
+  caption.forEach((line, i) => out.appendChild(svgEl('text', { x: 10, y: top + h + scaleH + 16 + i * 14, 'font-size': 10.5, fill: muted }, line)))
   return out
 }
 
@@ -211,19 +263,13 @@ export interface ChartItem {
 
 export type GraphFormat = 'svg' | 'png' | 'both'
 
-const GENERIC_LABEL = /^(dot plot|time course|effect-size heatmap)$/i
-
 /** Every chart inside `root`, named from its card title (or its own label), with `prefix` as folder. */
 export function collectCharts(root: Element, prefix = ''): ChartItem[] {
   const out: ChartItem[] = []
   const used = new Map<string, number>()
   for (const svg of root.querySelectorAll<SVGSVGElement>('svg[role="img"]')) {
     if (!svg.getAttribute('width') || Number(svg.getAttribute('width')) <= 0) continue
-    const aria = svg.getAttribute('aria-label') ?? ''
-    const card = svg.closest('.card')
-    const heading = card?.querySelector('h3, h2')?.textContent?.trim() ?? ''
-    const own = svg.dataset.chartName
-    const label = own || (aria && !GENERIC_LABEL.test(aria) ? aria : heading || aria || 'chart')
+    const label = titleOf(svg) || 'chart'
     const scopes: string[] = []
     for (let el: Element | null = svg; el && el !== root.parentElement; el = el.parentElement) {
       const sc = (el as HTMLElement).dataset?.chartScope

@@ -123,7 +123,7 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure, pairIndex 
               ]}
               theme={theme}
               svgRef={pawRef}
-              name="Per-paw fingerprint"
+              name={`Per-paw fingerprint: ${pair.group} vs ${pair.reference}`}
               onSelect={(row, col) => openMeasure(`${row}|${col}`)}
             />
           ) : (
@@ -143,7 +143,7 @@ export function Fingerprint({ results, time, theme, cfg, openMeasure, pairIndex 
             </span>
           </div>
           {bodyRows.length ? (
-            <Heatmap rows={bodyRows} cols={[{ key: 'g', label: 'g' }]} theme={theme} svgRef={bodyRef} name={paws ? 'Whole-body fingerprint' : 'Fingerprint'} onSelect={(row) => openMeasure(row)} />
+            <Heatmap rows={bodyRows} cols={[{ key: 'g', label: 'g' }]} theme={theme} svgRef={bodyRef} name={`${paws ? 'Whole-body fingerprint' : 'Fingerprint'}: ${pair.group} vs ${pair.reference}`} onSelect={(row) => openMeasure(row)} />
           ) : (
             <p className="small muted">No {paws ? 'whole-body ' : ''}parameters in this file.</p>
           )}

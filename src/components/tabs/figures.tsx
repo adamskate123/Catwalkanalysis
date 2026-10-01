@@ -1,5 +1,5 @@
 import { useRef, type ReactNode, type RefObject } from 'react'
-import { stars, type Measure } from '../../lib/analysis'
+import { stars, type Measure, type MeasureResult } from '../../lib/analysis'
 import { PAW_NAMES } from '../../lib/catalog'
 import { mean, sem, finite } from '../../lib/stats'
 import { downloadPng, downloadSvg, safeName } from '../../lib/export'
@@ -28,6 +28,17 @@ export function ChartCard({ title, children, svg, name }: { title: string; child
   )
 }
 
+const TEST_PROSE: Record<string, string> = { 'Welch t': "Welch's t-test", 'Mann–Whitney U': 'Mann–Whitney U test', 'Mann–Whitney U (exact)': 'Mann–Whitney U test' }
+
+/** Export caption for a dot plot: what the bars, points and stars mean. */
+function dotNote(r: MeasureResult | undefined, control: string | null): string {
+  const base = 'Bars: mean ± SEM; points: animals.'
+  const test = r?.comparisons.find((c) => c.reference === control)?.test.test
+  if (!r || !control || !test) return base
+  const holm = r.comparisons.length > 1 ? ', Holm-adjusted' : ''
+  return `${base} * p < 0.05, ** p < 0.01, *** p < 0.001 vs ${control} (${TEST_PROSE[test] ?? test}${holm}); ns, not significant.`
+}
+
 export function MeasureDots({ m, props, height = 240, fullTitle = false }: { m: Measure; props: TabProps; height?: number; fullTitle?: boolean }) {
   const { agg, results, time, theme, colorOf } = props
   const ref = useRef<SVGSVGElement>(null)
@@ -49,7 +60,7 @@ export function MeasureDots({ m, props, height = 240, fullTitle = false }: { m: 
   const title = fullTitle ? m.label : m.paw ? `${PAW_NAMES[m.paw]} (${m.paw})` : m.derived ? m.label.split(', ').slice(1).join(', ') : m.label
   return (
     <ChartCard title={title} svg={ref} name={`${m.label}${time ? '_' + time : ''}`}>
-      <DotPlot groups={groups} theme={theme} unit={m.derived?.startsWith('ASYM') ? '% (L−R)' : m.def.unit} height={height} svgRef={ref} />
+      <DotPlot groups={groups} theme={theme} unit={m.derived?.startsWith('ASYM') ? '% (L−R)' : m.def.unit} height={height} svgRef={ref} note={dotNote(r, props.cfg.controlGroup)} chartName={m.label} />
     </ChartCard>
   )
 }
@@ -67,7 +78,7 @@ export function TimeCourse({ m, props }: { m: Measure; props: TabProps }) {
   }))
   return (
     <ChartCard title={`${m.label} over time`} svg={ref} name={`${m.label}_timecourse`}>
-      <LineChart series={series} xs={agg.times} theme={theme} unit={m.def.unit} svgRef={ref} />
+      <LineChart series={series} xs={agg.times} theme={theme} unit={m.def.unit} svgRef={ref} note="Group mean ± SEM at each timepoint." />
     </ChartCard>
   )
 }

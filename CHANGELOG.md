@@ -3,6 +3,18 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.7.1] - 2026-10-01
+
+### Fixed
+
+- **Exported graphs now carry their title and legend.** Single, per-tab and bulk exports draw these into the image itself (on screen they sit in the card around the chart):
+  - the parameter name (e.g. *Coupling LF→RH*, *Print area (LF)*);
+  - the timepoint or age window (e.g. *Age 51-55 days*);
+  - a group legend with n for dot plots;
+  - a caption: bars = mean ± SEM, points = animals, what * / ** / *** and ns mean, the comparison group, the test and its multiple-comparison correction.
+- Fingerprint exports name the comparison (e.g. *Per-paw fingerprint: Mut vs WT*).
+- Line charts leave room for long group names next to the last point instead of cutting them off.
+
 ## [2.7.0] - 2026-10-01
 
 Tested with a real CatWalk XT run-statistics export and its animal key.

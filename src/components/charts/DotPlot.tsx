@@ -23,6 +23,10 @@ interface Props {
   title?: string
   svgRef?: Ref<SVGSVGElement>
   zeroBased?: boolean
+  /** Caption added under the title when the chart is exported (e.g. what the bars and stars mean). */
+  note?: string
+  /** Full name used as the exported file's title (e.g. "Print area (LF)"). */
+  chartName?: string
 }
 
 function wrap(label: string, maxChars: number): string[] {
@@ -40,7 +44,7 @@ function wrap(label: string, maxChars: number): string[] {
   return lines
 }
 
-export function DotPlot({ groups, theme, unit, height = 260, title, svgRef, zeroBased }: Props) {
+export function DotPlot({ groups, theme, unit, height = 260, title, svgRef, zeroBased, note, chartName }: Props) {
   const [ref, width] = useWidth<HTMLDivElement>()
   const [tip, setTip] = useState<TipState | null>(null)
   const all = groups.flatMap((g) => [...g.points.map((p) => p.v), g.mean + (g.sem || 0), g.mean - (g.sem || 0)]).filter(Number.isFinite)
@@ -63,7 +67,7 @@ export function DotPlot({ groups, theme, unit, height = 260, title, svgRef, zero
 
   return (
     <div ref={ref} className="chart" onPointerLeave={() => setTip(null)}>
-      <svg ref={svgRef} width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title ?? 'Dot plot'} xmlns="http://www.w3.org/2000/svg" fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif">
+      <svg ref={svgRef} width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title ?? 'Dot plot'} data-chart-name={chartName} data-chart-note={note} data-legend={JSON.stringify(groups.map((g) => ({ label: `${g.name} (n = ${g.n})`, color: g.color })))} xmlns="http://www.w3.org/2000/svg" fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif">
         <rect width={width} height={height} fill={theme.surface} />
         {title && (
           <text x={m.l - 38} y={16} fontSize={12} fontWeight={600} fill={theme.text}>
