@@ -19,9 +19,11 @@ interface Props {
   height?: number
   title?: string
   svgRef?: Ref<SVGSVGElement>
+  /** Caption added under the title when the chart is exported. */
+  note?: string
 }
 
-export function LineChart({ series, xs, theme, unit, height = 260, title, svgRef }: Props) {
+export function LineChart({ series, xs, theme, unit, height = 260, title, svgRef, note }: Props) {
   const [ref, width] = useWidth<HTMLDivElement>()
   const [tip, setTip] = useState<TipState | null>(null)
   const vals = series.flatMap((s) => s.points.flatMap((p) => [p.mean - (p.sem || 0), p.mean + (p.sem || 0)])).filter(Number.isFinite)
@@ -30,7 +32,9 @@ export function LineChart({ series, xs, theme, unit, height = 260, title, svgRef
   const pad = (hi - lo) * 0.1 || 1
   const ticks = niceTicks(lo - pad, hi + pad, height < 200 ? 3 : 5)
   const direct = series.length <= 4 && width >= 420
-  const m = { l: 46, r: direct ? 110 : 14, t: title ? 26 : 12, b: 30 }
+  // Direct labels sit right of the last point: leave room for the longest group name.
+  const labelRoom = Math.min(220, 24 + Math.max(0, ...series.map((x) => x.name.length)) * 6.6)
+  const m = { l: 46, r: direct ? labelRoom : 14, t: title ? 26 : 12, b: 30 }
   const pw = Math.max(40, width - m.l - m.r)
   const ph = height - m.t - m.b
   const y = linear(ticks[0], ticks[ticks.length - 1], m.t + ph, m.t)
@@ -53,7 +57,7 @@ export function LineChart({ series, xs, theme, unit, height = 260, title, svgRef
   return (
     <div ref={ref} className="chart" onPointerLeave={() => setTip(null)}>
       <Legend items={series.map((s) => ({ label: s.name, color: s.color }))} />
-      <svg ref={svgRef} width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title ?? 'Time course'} xmlns="http://www.w3.org/2000/svg" fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif">
+      <svg ref={svgRef} width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title ?? 'Time course'} data-chart-note={note} xmlns="http://www.w3.org/2000/svg" fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif">
         <rect width={width} height={height} fill={theme.surface} />
         {title && (
           <text x={8} y={16} fontSize={12} fontWeight={600} fill={theme.text}>

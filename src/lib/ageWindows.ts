@@ -21,6 +21,12 @@ export interface AgeWindowSettings {
   testDates?: Record<string, string>
 }
 
+/** A timepoint as written on an exported chart: age windows say "Age ≤50 days". */
+export function timeCaption(timeCol: string | null, time: string): string {
+  if (!time) return ''
+  return timeCol === AGE_WINDOW_COL ? `Age ${time}` : time
+}
+
 export interface AgeWindow {
   label: string
   lo: number

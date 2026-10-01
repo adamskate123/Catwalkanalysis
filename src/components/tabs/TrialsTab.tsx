@@ -51,7 +51,7 @@ export function TrialsTab(props: TabProps & { pick?: string }) {
         </p>
       </div>
       <ChartCard title={`${m.label.replace(/ per (interval|trial|bin)$/i, '')} by ${noun.toLowerCase()}`} svg={ref} name={`${m.label}_by_${noun.toLowerCase()}`}>
-        <LineChart series={series} xs={axis.map((a) => a.label)} theme={theme} unit={m.def.unit} svgRef={ref} height={300} />
+        <LineChart series={series} xs={axis.map((a) => a.label)} theme={theme} unit={m.def.unit} svgRef={ref} height={300} note={`Group mean ± SEM for each ${noun.toLowerCase()}.`} />
       </ChartCard>
     </>
   )

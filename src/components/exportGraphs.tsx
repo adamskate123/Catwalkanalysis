@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
 import { chartFiles, collectCharts, type GraphFormat } from '../lib/export'
 import { LIGHT_THEME, seriesColor } from '../lib/theme'
+import { timeCaption } from '../lib/ageWindows'
 import { hasTrialAnalysis, program } from '../programs'
 import { MeasureDots, TimeCourse } from './tabs/figures'
 import { Fingerprint } from './tabs/Fingerprint'
@@ -21,6 +22,8 @@ const SCOPE_SEP = ' › '
 interface Job {
   scope: string
   node: ReactNode
+  /** Timepoint written on each exported chart of this job. */
+  time?: string
 }
 
 const noop = () => {}
@@ -47,6 +50,7 @@ function jobs(base: TabProps, only?: Set<string>): Job[] {
   for (const t of times) {
     out.push({
       scope: ['Parameters', timeScope(t)].filter(Boolean).join(SCOPE_SEP),
+      time: timeCaption(base.cfg.timeCol, t),
       node: measures.map((m) => <MeasureDots key={m.key} m={m} props={at(t)} height={260} fullTitle />),
     })
   }
@@ -54,6 +58,7 @@ function jobs(base: TabProps, only?: Set<string>): Job[] {
     const pairs = pairsOf(results, t)
     out.push({
       scope: ['Fingerprint', timeScope(t)].filter(Boolean).join(SCOPE_SEP),
+      time: timeCaption(base.cfg.timeCol, t),
       node: pairs.map((p, i) => (
         <div key={i} data-chart-scope={`${p.group} vs ${p.reference}`}>
           <Fingerprint {...at(t)} pairIndex={i} />
@@ -86,6 +91,7 @@ function jobs(base: TabProps, only?: Set<string>): Job[] {
     for (const t of times)
       out.push({
         scope: ['Weight check', timeScope(t)].filter(Boolean).join(SCOPE_SEP),
+        time: timeCaption(base.cfg.timeCol, t),
         node: measures.filter((m) => m !== weight).map((m) => <WeightTab key={m.key} {...at(t)} goSetup={noop} pick={m.key} />),
       })
   }
@@ -94,6 +100,7 @@ function jobs(base: TabProps, only?: Set<string>): Job[] {
     for (const t of times)
       out.push({
         scope: ['Speed check', timeScope(t)].filter(Boolean).join(SCOPE_SEP),
+        time: timeCaption(base.cfg.timeCol, t),
         node: measures.filter((m) => m !== speed).map((m) => <SpeedTab key={m.key} {...at(t)} goSetup={noop} pick={m.key} />),
       })
   }
@@ -151,7 +158,11 @@ export async function allGraphFiles(
   const list = jobs(base, only)
   for (const [i, job] of list.entries()) {
     onProgress?.(`Drawing ${job.scope} (${i + 1} of ${list.length})…`)
-    const { el, done } = await mountOffscreen(<div data-chart-scope={job.scope}>{job.node}</div>)
+    const { el, done } = await mountOffscreen(
+      <div data-chart-scope={job.scope} data-chart-time={job.time || undefined}>
+        {job.node}
+      </div>,
+    )
     try {
       const charts = collectCharts(el, prefix)
       const f = await chartFiles(charts, format)

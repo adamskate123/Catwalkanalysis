@@ -1,6 +1,6 @@
 # Behavior Lab · Gait, Rotarod, Open Field, Cage Hang
 
-**Version 2.7.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 2.7.1**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
 A web app that turns rodent behavioural data into structured graphs, statistics and a written phenotype summary, with a built-in tutorial for each test. It contains four programs; switch between them by clicking the name and icon at the top left:
 
@@ -30,7 +30,7 @@ It runs in any modern browser on **phones, tablets and desktops**, and can be in
 - **Prism with graphs and statistics (.zip)**: the same project plus one "Statistics" table per timepoint with the app's results exactly as calculated (group n, mean, SD, SEM, omnibus p, FDR q and, per comparison, % difference, Hedges g, test statistic, df, p and Holm p); the graphs of the same parameters as SVG and PNG; `statistics.csv`; `methods.txt` (settings and tests, for a methods section); and the written summary. Prism cannot open the app's graphs as editable Prism graphs, so they are image files, and Prism does not recalculate the statistics tables.
 - **Export this tab's graphs** (above every tab with charts): the charts currently shown on that tab, as PNG, SVG or both.
 - **Download every graph (.zip)** (Data & export): every chart the app can draw for the analysis (each parameter at each timepoint, time courses, trial or habituation curves, fingerprints and progression heatmaps for every comparison, weight and speed checks), in folders by tab and timepoint, as PNG, SVG or both, in the light theme.
-- Exported charts include their group legend (and the colour scale for heatmaps). PNGs are 3× screen resolution.
+- Exported charts are self-contained: a title (the parameter, e.g. *Coupling LF→RH*), the timepoint or age window, a group legend with n, the heatmap colour scale, and a caption (bars = mean ± SEM, points = animals, what * / ** / *** mean, the test and its correction). PNGs are 3× screen resolution.
 
 ## Importing Prism and Excel tables
 

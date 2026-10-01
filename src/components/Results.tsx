@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { TabGraphsExport } from './TabGraphsExport'
-import { AGE_WINDOW_COL } from '../lib/ageWindows'
+import { AGE_WINDOW_COL, timeCaption } from '../lib/ageWindows'
 import { distinctValues } from '../lib/analysis'
 import type { AggregateResult, AnalysisConfig, Measure, TimeResults } from '../lib/analysis'
 import type { InterpretOptions } from '../lib/interpret'
@@ -168,7 +168,7 @@ export function Results(props: Props) {
           {chartTab && <TabGraphsExport key={tab} root={tabRef} name={tabLabel} time={showTimePicker ? time : undefined} />}
         </div>
       )}
-      <div ref={tabRef}>
+      <div ref={tabRef} data-chart-time={showTimePicker ? timeCaption(cfg.timeCol, time) : undefined}>
       {tab === 'summary' && <Summary {...tabProps} goSetup={() => setTab('setup')} />}
       {tab === 'story' && <StoryTab {...tabProps} />}
       {tab === 'fingerprint' && <Fingerprint {...tabProps} />}
