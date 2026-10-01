@@ -1,5 +1,6 @@
 import Papa from 'papaparse'
 import { AGE_WINDOW_COL, addAgeColumns, type AgeInfo, type AgeWindowSettings } from './ageWindows'
+import { isReferenceTable, type WeightReference } from './weightRef'
 import readXlsxFile from 'read-excel-file/universal'
 import type { ColumnMatch, MetaRole } from './catalog'
 import { program, roleOf } from '../programs'
@@ -24,6 +25,8 @@ export interface ParsedTable {
   headerRow: number
   headers: string[]
   rows: Cell[][]
+  /** Title line above the header row, if any (e.g. the name of a reference table). */
+  title?: string
 }
 
 export interface ColumnInfo {
@@ -213,9 +216,19 @@ export function pickTables(sheets: RawSheet[], opts: ImportOptions = {}): Parsed
     s: t.headers.filter((h) => matchColumn(h)).length,
   }))
   const max = Math.max(0, ...scored.map((x) => x.s))
-  if (max === 0) return tables.slice(0, 1)
+  // Reference-weight sheets (age in weeks, female/male mean and SD) are kept for programs that use them.
+  const refs = program().augment
+    ? scored
+        .filter((x) => x.s === 0 && isReferenceTable(x.t))
+        .map(({ t }) => {
+          const raw = sheets.find((s) => s.file === t.file && s.sheet === t.sheet)
+          const title = raw?.cells.slice(0, t.headerRow).flat().find((c) => typeof c === 'string' && c.trim().length > 3)
+          return { ...t, title: typeof title === 'string' ? title : undefined }
+        })
+    : []
+  if (max === 0) return [...tables.slice(0, 1), ...refs.filter((r) => r !== tables[0])]
   // keep sheets that have at least half as many recognised columns as the best one
-  return scored.filter((x) => x.s >= max / 2).map((x) => x.t)
+  return [...scored.filter((x) => x.s >= max / 2).map((x) => x.t), ...refs]
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +265,8 @@ export interface Dataset {
   ageInfo?: AgeInfo | null
   /** Display order of a column's values when it isn't natural order (age windows). */
   valueOrder?: Record<string, string[]>
+  /** Reference strain used for body-weight comparisons (Weight Lab). */
+  reference?: WeightReference | null
 }
 
 export const SOURCE_COL = 'Source file'
@@ -309,8 +324,17 @@ const norm = (c: Cell) => (c === null ? '' : String(c).trim().toLowerCase().repl
 const isTrialLevel = (t: ParsedTable) => t.headers.some((h) => metaRole(h) === 'nruns')
 const isRunLevel = (t: ParsedTable) => t.headers.some((h) => metaRole(h) === 'run')
 
-export function mergeTables(all: ParsedTable[], opts: MergeOptions = {}): Dataset {
+export function mergeTables(input: ParsedTable[], opts: MergeOptions = {}): Dataset {
   const notices: string[] = []
+  // Reference-weight tables (strain norms) are not data or animal keys.
+  const referenceTables = input.filter(isReferenceTable)
+  const all = input
+    .filter((t) => !referenceTables.includes(t))
+    .map((t) => {
+      const p = program().prepare?.(t)
+      if (p?.notice) notices.push(p.notice)
+      return p ? p.table : t
+    })
   // Body-weight tables are joined onto the other data as a covariate when there are other data.
   const weightOnly = all.filter(isWeightTable)
   const weightTables = weightOnly.length < all.filter((t) => !isKeyTable(t) || isWeightTable(t)).length ? weightOnly : []
@@ -429,12 +453,15 @@ export function mergeTables(all: ParsedTable[], opts: MergeOptions = {}): Datase
       notices.push(w.notice)
     }
   }
+  // Programs may derive columns of their own (e.g. Weight Lab: age, week, reference z-score).
+  const extra = program().augment?.(headers, rows, referenceTables)
+  if (extra) notices.push(...extra.notices)
   const age = addAgeColumns(headers, rows, opts.ageWindows, keys[0]?.dataColumn)
   if (age.notice) notices.push(age.notice)
   const columns = classifyColumns(headers, rows, keyCols)
   // The age window is a timepoint like the instrument's own.
   for (const c of columns) if (c.name === AGE_WINDOW_COL) c.meta = 'time'
-  return { headers, rows, columns, sources, keys, notices, ageInfo: age.info, valueOrder: age.valueOrder }
+  return { headers, rows, columns, sources, keys, notices, ageInfo: age.info, valueOrder: age.valueOrder, reference: extra?.reference ?? null }
 }
 
 export const WEIGHT_COL = 'Body weight (g)'

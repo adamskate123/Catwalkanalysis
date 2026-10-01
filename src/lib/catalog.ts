@@ -69,6 +69,8 @@ export interface ParamDef {
   needs?: string[]
   /** Not adjusted when adjusting for body weight (it already includes weight). */
   noWeightAdjust?: boolean
+  /** No % change vs control (a score centred on 0, such as a z-score, has no meaningful %). */
+  noPercent?: boolean
 }
 
 // Order matters: more specific patterns first.

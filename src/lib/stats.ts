@@ -196,6 +196,39 @@ export interface TestResult {
   p: number
 }
 
+/** One-sample t-test of the mean against `mu` (two-sided). */
+export function oneSampleT(xs: readonly number[], mu = 0): TestResult {
+  const n = xs.length
+  if (n < 2) return { test: 'One-sample t', statistic: NaN, p: NaN }
+  const se = sd(xs) / Math.sqrt(n)
+  if (!(se > 0)) return { test: 'One-sample t', statistic: NaN, df: n - 1, p: NaN }
+  const t = (mean(xs) - mu) / se
+  return { test: 'One-sample t', statistic: t, df: n - 1, p: tTwoSidedP(t, n - 1) }
+}
+
+/** Two-sided critical t value for a confidence level (e.g. 0.95), found by bisection. */
+export function tCritical(df: number, level = 0.95): number {
+  if (!(df > 0)) return NaN
+  const alpha = 1 - level
+  let lo = 0
+  let hi = 1000
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2
+    if (tTwoSidedP(mid, df) > alpha) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
+
+/** Mean with a two-sided confidence interval from the t distribution. */
+export function meanCI(xs: readonly number[], level = 0.95): { mean: number; lo: number; hi: number; n: number } {
+  const n = xs.length
+  const m = mean(xs)
+  if (n < 2) return { mean: m, lo: NaN, hi: NaN, n }
+  const h = tCritical(n - 1, level) * (sd(xs) / Math.sqrt(n))
+  return { mean: m, lo: m - h, hi: m + h, n }
+}
+
 /** Welch's unequal-variance t-test (two-sided). */
 export function welchT(a: readonly number[], b: readonly number[]): TestResult {
   const na = a.length

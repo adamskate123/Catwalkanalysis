@@ -793,7 +793,7 @@ export function analyse(agg: AggregateResult, measures: Measure[], cfg: Analysis
           pAdj: NaN,
           g: hedgesG(a, b),
           diff: groups[g].mean - refMean,
-          diffPct: refMean !== 0 ? ((groups[g].mean - refMean) / Math.abs(refMean)) * 100 : NaN,
+          diffPct: refMean !== 0 && !m.def.noPercent ? ((groups[g].mean - refMean) / Math.abs(refMean)) * 100 : NaN,
         })
       }
       if (control && groups[control]?.n) {

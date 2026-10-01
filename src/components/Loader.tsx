@@ -6,7 +6,7 @@ import type { ExperimentSummary } from '../lib/experiment'
 import { getImportOptions, setImportOptions, type PrismLayout } from '../lib/importers'
 import { isBackupFile, readSpreadsheets, type LoadedFile } from '../lib/readFiles'
 import { PROGRAMS, program } from '../programs'
-import { ArenaDiagram, CageHangDiagram, RotarodDiagram, WalkwayDiagram } from './diagrams'
+import { ArenaDiagram, CageHangDiagram, RotarodDiagram, WalkwayDiagram, WeightDiagram } from './diagrams'
 
 interface Props {
   onLoaded: (files: LoadedFile[]) => void
@@ -38,6 +38,12 @@ const HERO: Record<string, { title: string; figure: () => ReactElement; caption:
     figure: CageHangDiagram,
     caption: 'Cage hang: the mouse grips an inverted wire lid; the time until it falls measures grip strength and endurance, and weight × time gives the holding impulse.',
     learn: 'How the cage hang test works →',
+  },
+  weight: {
+    title: 'Track body weight against your controls and a reference strain',
+    figure: WeightDiagram,
+    caption: 'Weight Lab: every weigh-in is placed at the animal’s age and compared with the control group and with a reference strain (C57BL/6J mean ± 2 SD shown) of the same sex.',
+    learn: 'How weight is analysed →',
   },
   openfield: {
     title: 'Turn open field tracking into graphs and a readable activity summary',

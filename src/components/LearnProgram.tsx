@@ -1,7 +1,7 @@
 import { useState, type ReactElement, type ReactNode } from 'react'
 import { getProgram, type ProgramId } from '../programs'
-import { ArenaDiagram, CageHangDiagram, RotarodDiagram } from './diagrams'
-import { CAGEHANG_REFS, OPENFIELD_REFS, ROTAROD_REFS, type Reference } from '../lib/references'
+import { ArenaDiagram, CageHangDiagram, RotarodDiagram, WeightDiagram } from './diagrams'
+import { CAGEHANG_REFS, OPENFIELD_REFS, ROTAROD_REFS, WEIGHT_REFS, type Reference } from '../lib/references'
 
 // Tutorials for the rotarod and open field programs. References live in lib/references.ts.
 
@@ -201,6 +201,63 @@ const CONTENT: Record<Exclude<ProgramId, 'catwalk'>, Content> = {
       </ul>
     ),
     refs: CAGEHANG_REFS,
+  },
+  weight: {
+    title: 'Body weight over time: a short tutorial',
+    intro:
+      'Body weight is the simplest whole-animal readout of health and growth. Weighing every week gives a growth curve for each animal; Weight Lab compares those curves between groups and against a reference strain, so failure to thrive, weight loss or excess gain can be tested rather than eyeballed.',
+    figure: WeightDiagram,
+    caption: 'Weights placed at each animal’s age. The shaded band is the reference strain’s mean ± 2 SD for that sex; a group sliding out of the band is falling behind.',
+    how: (
+      <>
+        <p>
+          <b>Against your own controls.</b> Each weigh-in is placed at the animal’s age (weigh date − date of birth), rounded to the nearest week. At each
+          week the groups are compared with the control group exactly as in the other programs (Welch’s t-test or Mann–Whitney, Holm-adjusted, with Hedges’
+          g). Males are heavier than females, so compare one sex at a time (Setup → Filters) or use the z-score below, which removes sex and age.
+        </p>
+        <p>
+          <b>Against a reference strain.</b> Every weigh-in is compared with the published mean and SD for the same sex and week of age. The built-in table is
+          C57BL/6J from The Jackson Laboratory, weeks 3–24, from up to 120 mice of each sex per week<Cite refs={WEIGHT_REFS} ids={['jax000664']} />; longitudinal
+          studies of the same strain show the same steep gain to about 9 weeks and a slower rise after.<Cite refs={WEIGHT_REFS} ids={['gargiulo2014']} /> The
+          z-score, (weight − reference mean) ÷ reference SD, says how unusual a weight is: z ≤ −2 is about the lightest 2.5% of the reference colony. The
+          Reference strain tab tests each group’s z-scores against 0 (the reference mean) week by week, and each animal’s average z-score across all its
+          weigh-ins against the control group.
+        </p>
+      </>
+    ),
+    protocol: (
+      <ul>
+        <li>Weigh at the same time of day on the same scale, ideally weekly; weigh before other tests on test days.</li>
+        <li>
+          Keep one row per animal with <b>Animal ID</b>, <b>Sex</b>, <b>Genotype</b> (or group) and <b>DOB</b>, and one column per weigh-in date (or one row
+          per weigh-in with a date column). Empty cells are fine.
+        </li>
+        <li>
+          To use a different reference strain, add a sheet with <b>Age (weeks)</b>, <b>Female Mean</b>, <b>Female SD</b>, <b>Male Mean</b> and <b>Male SD</b>; it
+          replaces the built-in C57BL/6J table.
+        </li>
+        <li>Record sex for every animal: the reference comparison is sex-specific.</li>
+      </ul>
+    ),
+    confounds: (
+      <ul>
+        <li>
+          <b>Background strain.</b> The reference is a C57BL/6J colony average, not a background-matched control. Mice on a mixed or different background can
+          differ from it for reasons unrelated to genotype, so treat littermate controls as the primary comparison.
+        </li>
+        <li>
+          <b>Sex.</b> Comparing groups with different numbers of males and females confounds sex with genotype; filter to one sex or compare z-scores.
+        </li>
+        <li>
+          <b>Ages outside the table.</b> Weigh-ins outside the reference weeks (3–24 for C57BL/6J) get no z-score rather than an extrapolated one.
+        </li>
+        <li>
+          <b>Repeated weighings.</b> Weekly tests treat each week separately; the per-animal average z-score summarises the whole curve in one test per
+          group.
+        </li>
+      </ul>
+    ),
+    refs: WEIGHT_REFS,
   },
 }
 

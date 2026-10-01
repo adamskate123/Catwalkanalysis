@@ -19,6 +19,7 @@ import { SpeedTab } from './tabs/SpeedTab'
 import { DataTab } from './tabs/DataTab'
 import { TrialsTab } from './tabs/TrialsTab'
 import { WeightTab } from './tabs/WeightTab'
+import { WeightRefTab } from './tabs/WeightRefTab'
 import { hasTrialAnalysis, program } from '../programs'
 import type { TabProps } from './tabs/types'
 
@@ -41,7 +42,7 @@ interface Props {
   onLearn: (anchor?: string) => void
 }
 
-type Tab = 'summary' | 'story' | 'fingerprint' | 'explore' | 'trials' | 'time' | 'speed' | 'weight' | 'data' | 'setup' | 'experiment'
+type Tab = 'summary' | 'story' | 'fingerprint' | 'explore' | 'trials' | 'time' | 'speed' | 'weight' | 'reference' | 'data' | 'setup' | 'experiment'
 
 export function Results(props: Props) {
   const { ds, measures, cfg, setCfg, opt, setOpt, agg, results, theme, onReset, onLearn, experiment, saveState } = props
@@ -92,17 +93,19 @@ export function Results(props: Props) {
     ...(hasTrials ? ([['trials', prog.trialsTab?.label ?? 'Trials']] as [Tab, string][]) : []),
     ...(hasTime ? ([['time', 'Over time']] as [Tab, string][]) : []),
     ...(prog.features.speed ? ([['speed', 'Speed check']] as [Tab, string][]) : []),
-    ...(measures.some((m) => m.def.id === 'body_weight') ? ([['weight', 'Weight check']] as [Tab, string][]) : []),
+    // Weight Lab analyses weight itself: its reference-strain tab replaces the weight check.
+    ...(prog.id === 'weight' ? ([['reference', 'Reference strain']] as [Tab, string][]) : []),
+    ...(prog.id !== 'weight' && measures.some((m) => m.def.id === 'body_weight') ? ([['weight', 'Weight check']] as [Tab, string][]) : []),
     ['data', 'Data & export'],
     ['setup', 'Setup'],
     ['experiment', 'Experiment & data'],
   ]
 
-  const showTimePicker = hasTime && tab !== 'time' && tab !== 'trials' && tab !== 'setup' && tab !== 'data' && tab !== 'experiment'
+  const showTimePicker = hasTime && tab !== 'time' && tab !== 'trials' && tab !== 'reference' && tab !== 'setup' && tab !== 'data' && tab !== 'experiment'
   // With age windows, a switch between them and the data files' own timepoints.
   const showSource = ds.headers.includes(AGE_WINDOW_COL) && tab !== 'setup' && tab !== 'data' && tab !== 'experiment'
   // Tabs that draw charts get "Export this tab's graphs".
-  const chartTab = (['story', 'fingerprint', 'explore', 'trials', 'time', 'speed', 'weight'] as Tab[]).includes(tab)
+  const chartTab = (['story', 'fingerprint', 'explore', 'trials', 'time', 'speed', 'weight', 'reference'] as Tab[]).includes(tab)
   const tabLabel = tabs.find(([id]) => id === tab)?.[1] ?? tab
 
   return (
@@ -177,6 +180,7 @@ export function Results(props: Props) {
       {tab === 'time' && <TimeTab {...tabProps} />}
       {tab === 'speed' && <SpeedTab {...tabProps} goSetup={() => setTab('setup')} />}
       {tab === 'weight' && <WeightTab {...tabProps} goSetup={() => setTab('setup')} />}
+      {tab === 'reference' && <WeightRefTab {...tabProps} />}
       {tab === 'data' && <DataTab {...tabProps} />}
       {tab === 'experiment' && (
         <ExperimentTab

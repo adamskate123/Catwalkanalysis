@@ -6,10 +6,13 @@ import {
   hedgesG,
   holm,
   kruskalWallis,
+  meanCI,
   mannWhitney,
   normalCdf,
+  oneSampleT,
   oneWayAnova,
   pooledWithinSlope,
+  tCritical,
   tTwoSidedP,
   welchT,
 } from './stats'
@@ -92,5 +95,21 @@ describe('pooled slope', () => {
       ...[11, 12, 13, 14].map((x) => ({ x, y: 2 * x - 100, g: 'B' })),
     ]
     expect(pooledWithinSlope(pts)).toBeCloseTo(2, 12)
+  })
+})
+
+describe('one-sample t-test and confidence intervals (SciPy reference values)', () => {
+  it('matches scipy.stats.ttest_1samp', () => {
+    const r = oneSampleT(a, 5)
+    expect(r.statistic).toBeCloseTo(2.997924593317836, 10)
+    expect(r.p).toBeCloseTo(0.0240725943947707, 8)
+    expect(r.df).toBe(6)
+  })
+  it('matches scipy.stats.t.ppf(0.975, df)', () => {
+    expect(tCritical(10)).toBeCloseTo(2.228138851986274, 8)
+    expect(tCritical(1)).toBeCloseTo(12.706204736174694, 6)
+    const ci = meanCI(a)
+    expect(ci.lo).toBeCloseTo(5.099776092954625, 8)
+    expect(ci.hi).toBeCloseTo(5.985938192759661, 8)
   })
 })

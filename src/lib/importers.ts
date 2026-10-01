@@ -10,7 +10,7 @@ import Papa from 'papaparse'
 import { strFromU8, unzipSync } from 'fflate'
 import { normalizeKey } from './catalog'
 import { program, roleOf } from '../programs'
-import { MISSING, parseNumber, toNumber, type Cell, type ParsedTable, type RawSheet } from './parse'
+import { MISSING, parseDay, parseNumber, toNumber, type Cell, type ParsedTable, type RawSheet } from './parse'
 
 export type PrismLayout = 'auto' | 'animals' | 'trials'
 
@@ -543,15 +543,22 @@ interface WideCol {
   day: number | null
   trial: number | null
   bin: string | null
+  /** ISO date of a date-headed column (a weigh-in), for programs that read those. */
+  date?: string
   measure: string
 }
 
 /** Wide layout: one column per trial, day or time bin → one row per animal × trial. */
 function meltWide(t: ParsedTable): ParsedTable | null {
   if (t.headers.some((h) => roleOf(h) === 'run')) return null
+  const dateCol = program().dateColumn
   const parse = (h: string, i: number): WideCol | null => {
     if (numericShare(t, i) < 0.8) return null
     const name = h.trim()
+    if (dateCol) {
+      const day = parseDay(name)
+      if (day !== null) return { i, day: null, trial: null, bin: null, date: new Date(day * 864e5).toISOString().slice(0, 10), measure: '' }
+    }
     let m = TRIAL_COL.exec(name)
     if (m) return { i, day: m[1] ? +m[1] : null, trial: +m[2], bin: null, measure: m[3] }
     m = BIN_COL.exec(name)
@@ -560,7 +567,10 @@ function meltWide(t: ParsedTable): ParsedTable | null {
     if (m) return { i, day: +m[1], trial: null, bin: null, measure: m[2] }
     return null
   }
-  const cols = t.headers.map(parse).filter((c): c is WideCol => c !== null)
+  let cols = t.headers.map(parse).filter((c): c is WideCol => c !== null)
+  // Date-headed columns are weigh-ins only when every value is positive (a sheet of
+  // z-scores with the same dates is not).
+  if (cols.some((c) => c.date) && cols.some((c) => c.date && t.rows.some((r) => r[c.i] !== null && !(Number(r[c.i]) > 0)))) cols = cols.filter((c) => !c.date)
   if (cols.length < 2) return null
   const keep = t.headers.map((_, i) => i).filter((i) => !cols.some((c) => c.i === i))
   const measureName = (c: WideCol) => (!c.measure || isUnitsOnly(c.measure) ? program().primaryColumn : c.measure.trim())
@@ -569,14 +579,15 @@ function meltWide(t: ParsedTable): ParsedTable | null {
   const hasDay = cols.some((c) => c.day !== null)
   const hasTrial = cols.some((c) => c.trial !== null)
   const hasBin = cols.some((c) => c.bin !== null)
+  const hasDate = cols.some((c) => c.date)
   const trialName = program().trialDerived?.length ? (program().trialColumn ?? 'Trial') : 'Replicate'
-  const headers = [...keep.map((i) => t.headers[i]), ...(hasDay ? ['Day'] : []), ...(hasTrial ? [trialName] : []), ...(hasBin ? ['Time bin'] : []), ...measures]
+  const headers = [...keep.map((i) => t.headers[i]), ...(hasDay ? ['Day'] : []), ...(hasTrial ? [trialName] : []), ...(hasBin ? ['Time bin'] : []), ...(hasDate ? [dateCol!] : []), ...measures]
   const rows: Cell[][] = []
   for (const r of t.rows) {
     const byPos = new Map<string, Cell[]>()
     for (const c of cols) {
       if (r[c.i] === null) continue
-      const pos = `${c.day}|${c.trial}|${c.bin}`
+      const pos = `${c.day}|${c.trial}|${c.bin}|${c.date}`
       let row = byPos.get(pos)
       if (!row) {
         row = [
@@ -584,6 +595,7 @@ function meltWide(t: ParsedTable): ParsedTable | null {
           ...(hasDay ? [c.day === null ? null : `Day ${c.day}`] : []),
           ...(hasTrial ? [c.trial] : []),
           ...(hasBin ? [c.bin] : []),
+          ...(hasDate ? [c.date ?? null] : []),
           ...measures.map(() => null),
         ]
         byPos.set(pos, row)
