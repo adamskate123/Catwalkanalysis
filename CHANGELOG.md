@@ -3,6 +3,29 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.7.0] - 2026-10-01
+
+Tested with a real CatWalk XT run-statistics export and its animal key.
+
+### Added
+
+- **Age windows** (Setup → Age windows):
+  - **Age at test** is calculated from each animal's date of birth and test date. Dates of birth come from an animal key or are entered or pasted in Setup (one "ID, date" pair per line). Test dates come from:
+    - the timepoint column, when it holds dates;
+    - a test-date column in the key;
+    - a date entered per timepoint or session;
+    - a date in the experiment name.
+  - **Windows you set**: consecutive bins (≤50, 51-100, … days, named like age-binned Prism sheets for rotarod and open field) or target ages ± days. Runs without an age, or outside every window, are left out and counted in a notice.
+  - **Switching timepoints**: the age window is a timepoint like the instrument's own. "Analyse timepoints by" in Setup, and a switch above the results, move between age windows, the data files' timepoints and no timepoints. Every tab, statistic and export follows.
+
+### Fixed
+
+- **Body contacts in CatWalk XT exports are now read.** XT names them `OtherStatistics_AB`, `TA`, `GT`, `NO`, `RK`, `LK`, `RM` and `LM` (%). The order matches the published list (right hip, right knee, left hip, left knee, nose, abdomen, tail, genitalia), so RM/LM are read as right/left hip. Columns that are always zero (contacts not labelled) are not analysed.
+
+### Changed
+
+- The dragging pattern notes that in complete hind-limb paralysis prints shrink rather than lengthen, so labelled abdomen contact is then the better marker (Zheng et al. 2023, which also supports hind ÷ front corrected values).
+
 ## [2.6.0] - 2026-09-30
 
 Checked against the CatWalk literature in PubMed (Hamers et al. 2001 and 2006; Koopmans et al. 2005; Timotius et al. 2023; Basso et al. 2006).

@@ -112,7 +112,8 @@ export default function App() {
 
   const tables = useMemo(() => (experiment ? experimentTables(experiment) : null), [experiment])
   const keyChoices = experiment?.keyChoices
-  const ds = useMemo(() => (tables ? mergeTables(tables, { keyChoices }) : null), [tables, keyChoices])
+  const ageWindows = experiment?.ageWindows
+  const ds = useMemo(() => (tables ? mergeTables(tables, { keyChoices, ageWindows }) : null), [tables, keyChoices, ageWindows])
   const measures = useMemo(() => (ds ? buildMeasures(ds) : []), [ds])
   const agg = useMemo(() => (ds && cfg ? aggregate(ds, measures, cfg) : null), [ds, measures, cfg])
   const results = useMemo(() => (agg && cfg ? analyse(agg, measures, cfg) : null), [agg, measures, cfg])
@@ -138,7 +139,7 @@ export default function App() {
 
   const openExperiment = (e: Experiment, persistNow = false) => {
     activate(e.program ?? 'catwalk')
-    const ds0 = mergeTables(experimentTables(e), { keyChoices: e.keyChoices })
+    const ds0 = mergeTables(experimentTables(e), { keyChoices: e.keyChoices, ageWindows: e.ageWindows })
     const cfg0 = reconcileConfig(e.cfg, ds0)
     setExperiment(e)
     setCfg(cfg0)
@@ -177,7 +178,7 @@ export default function App() {
     if (!experiment || !ds || !cfg) return ''
     const before = aggregate(ds, measures, cfg)
     const next: Experiment = { ...experiment, files: [...experiment.files, ...toStored(files, session)], updatedAt: new Date().toISOString() }
-    const ds2 = mergeTables(experimentTables(next), { keyChoices: next.keyChoices })
+    const ds2 = mergeTables(experimentTables(next), { keyChoices: next.keyChoices, ageWindows: next.ageWindows })
     const cfg2 = reconcileConfig(cfg, ds2)
     const after = aggregate(ds2, buildMeasures(ds2), cfg2)
     setSaveState('saving')
@@ -201,11 +202,12 @@ export default function App() {
     return `Added ${files.length} file${files.length === 1 ? '' : 's'}: ${parts.join('; ')}.`
   }
 
-  const updateExperiment = (e: Experiment) => {
+  /** Saves experiment changes; `cfgPatch` (e.g. a new time column) is applied before the config is reconciled with the new data. */
+  const updateExperiment = (e: Experiment, cfgPatch?: Partial<AnalysisConfig>) => {
     setSaveState('saving')
-    const ds2 = mergeTables(experimentTables(e), { keyChoices: e.keyChoices })
+    const ds2 = mergeTables(experimentTables(e), { keyChoices: e.keyChoices, ageWindows: e.ageWindows })
     setExperiment({ ...e, updatedAt: new Date().toISOString() })
-    setCfg((c) => reconcileConfig(c ?? undefined, ds2))
+    setCfg((c) => reconcileConfig(c ? { ...c, ...cfgPatch } : undefined, ds2))
   }
 
   const openById = async (id: string) => {
