@@ -25,7 +25,8 @@ export type DerivedKind = 'FRONT' | 'HIND' | 'ASYM_F' | 'ASYM_H' | 'HF'
 /**
  * Print measures that also get a hind ÷ front ratio. Hind/fore ratios of print size
  * and intensity correct for body size and track hind-limb function after thoracic
- * spinal cord injury (reviewed in Timotius et al. 2023, doi:10.3389/fnbeh.2023.1147784).
+ * spinal cord injury and are less affected by body weight than absolute values (Zheng et al.
+ * 2023, doi:10.4103/1673-5374.355763; reviewed in Timotius et al. 2023, doi:10.3389/fnbeh.2023.1147784).
  */
 export const HIND_FRONT_RATIO = new Set(['print_length', 'print_area', 'max_contact_area', 'max_intensity', 'mean_intensity', 'print_elongation'])
 
@@ -289,6 +290,8 @@ export function distinctValues(ds: Dataset, name: string | null): string[] {
     const t = cellText(r[i])
     if (t) s.add(t)
   }
+  const order = name ? ds.valueOrder?.[name] : undefined
+  if (order) return [...order.filter((v) => s.has(v)), ...[...s].filter((v) => !order.includes(v)).sort(naturalCompare)]
   return [...s].sort(naturalCompare)
 }
 

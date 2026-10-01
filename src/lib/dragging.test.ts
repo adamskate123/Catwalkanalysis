@@ -6,6 +6,7 @@ import { setProgram } from '../programs'
 import { aggregate, analyse, autoConfig, buildMeasures } from './analysis'
 import { interpret, isReported, isShown } from './interpret'
 import { detectTable, mergeTables, type Cell } from './parse'
+import { matchColumn } from './catalog'
 
 const PAWS = ['LF', 'RF', 'LH', 'RH'] as const
 
@@ -102,5 +103,25 @@ describe('hind-paw dragging pattern', () => {
     const f = dragging({ dragging: false, slowHind: true, abdomen: true })
     expect(f.supporting.some((e) => e.result.measure.def.id === 'contact_abdomen')).toBe(true)
     expect(isReported(f)).toBe(true)
+  })
+})
+
+describe('CatWalk XT body-contact column names', () => {
+  it.each([
+    ['OtherStatistics_AB_(%)', 'contact_abdomen'],
+    ['OtherStatistics_TA_(%)', 'contact_tail'],
+    ['OtherStatistics_GT_(%)', 'contact_genitalia'],
+    ['OtherStatistics_NO_(%)', 'contact_nose'],
+    ['OtherStatistics_RM_(%)', 'contact_right_hip'],
+    ['OtherStatistics_LM_(%)', 'contact_left_hip'],
+    ['OtherStatistics_RK_(%)', 'contact_right_knee'],
+    ['OtherStatistics_LK_(%)', 'contact_left_knee'],
+    ['Abdomen_(%)', 'contact_abdomen'],
+  ])('%s → %s', (name, id) => {
+    setProgram('catwalk')
+    expect(matchColumn(name)?.paramId).toBe(id)
+  })
+  it('does not read step-sequence AB as abdomen', () => {
+    expect(matchColumn('StepSequence_AB_(%)')?.paramId).not.toBe('contact_abdomen')
   })
 })

@@ -4,6 +4,7 @@
 import { distinctValues, groupList, naturalCompare, type AnalysisConfig, autoConfig } from './analysis'
 import type { InterpretOptions } from './interpret'
 import { isKeyTable, type Dataset, type KeyChoice, type ParsedTable } from './parse'
+import type { AgeWindowSettings } from './ageWindows'
 import type { ProgramId } from '../programs'
 
 export const SESSION_COL = 'Session'
@@ -31,6 +32,8 @@ export interface Experiment {
   opt?: InterpretOptions
   /** Animal-key joins picked by hand (Setup → Animal key), by key file label. */
   keyChoices?: Record<string, KeyChoice>
+  /** Age windows and dates of birth / test dates entered in Setup → Age windows. */
+  ageWindows?: AgeWindowSettings
   notes?: string
   appVersion: string
 }
@@ -121,7 +124,10 @@ export function reconcileConfig(old: AnalysisConfig | undefined, ds: Dataset): A
   }
   const times = distinctValues(ds, cfg.timeCol)
   cfg.timeOrder =
-    cfg.timeCol === old.timeCol
+    // Age windows keep their own order (≤50, 51-100, …), whatever was saved before.
+    cfg.timeCol && ds.valueOrder?.[cfg.timeCol]
+      ? times
+      : cfg.timeCol === old.timeCol
       ? [...old.timeOrder.filter((t) => times.includes(t)), ...times.filter((t) => !old.timeOrder.includes(t)).sort(naturalCompare)]
       : times
   return cfg

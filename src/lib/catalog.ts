@@ -266,16 +266,19 @@ export const PARAMS: ParamDef[] = [
   // CatWalk XT reports these only when body parts touching the glass (abdomen,
   // tail, hips, knees…) are labelled in the run classification. They measure
   // dragging directly (Timotius et al. 2023, doi:10.3389/fnbeh.2023.1147784).
+  // Exports name them OtherStatistics_RM, RK, LM, LK, NO, AB, TA, GT (%); the
+  // order matches the review's right hip, right knee, left hip, left knee, nose,
+  // abdomen, tail, genitalia, so RM/LM are read as right/left hip.
   ...(
     [
-      ['abdomen', 'Abdomen', /^(abdomen|belly)(contact)?$/],
-      ['tail', 'Tail', /^tail(contact)?$/],
-      ['genitalia', 'Genitalia', /^genitalia(contact)?$/],
-      ['nose', 'Nose', /^nose(contact)?$/],
-      ['left_hip', 'Left hip', /^lefthip(contact)?$/],
-      ['right_hip', 'Right hip', /^righthip(contact)?$/],
-      ['left_knee', 'Left knee', /^leftknee(contact)?$/],
-      ['right_knee', 'Right knee', /^rightknee(contact)?$/],
+      ['abdomen', 'Abdomen', /^(abdomen|belly|ab)(contact)?$/],
+      ['tail', 'Tail', /^(tail|ta)(contact)?$/],
+      ['genitalia', 'Genitalia', /^(genitalia|genitals|gt)(contact)?$/],
+      ['nose', 'Nose', /^(nose|no)(contact)?$/],
+      ['left_hip', 'Left hip', /^(lefthip|lm)(contact)?$/],
+      ['right_hip', 'Right hip', /^(righthip|rm)(contact)?$/],
+      ['left_knee', 'Left knee', /^(leftknee|lk)(contact)?$/],
+      ['right_knee', 'Right knee', /^(rightknee|rk)(contact)?$/],
     ] as const
   ).map(
     ([k, name, re]): ParamDef => ({

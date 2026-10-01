@@ -1,5 +1,7 @@
 import { DEFAULT_MAX_VARIATION, combineGroups, isControlLike, distinctValues, groupDefaults, groupMembers, splitGroup, type AnalysisConfig, type Measure } from '../lib/analysis'
 import { CombineGroups } from './CombineGroups'
+import { AgeWindowsCard } from './AgeWindowsCard'
+import type { AgeWindowSettings } from '../lib/ageWindows'
 import { program } from '../programs'
 import type { InterpretOptions } from '../lib/interpret'
 import type { Dataset, KeyChoice } from '../lib/parse'
@@ -15,6 +17,9 @@ interface Props {
   onLearn: (anchor?: string) => void
   /** Sets (or, with null, clears) a hand-picked animal-key join. */
   onKeyChoice?: (file: string, choice: KeyChoice | null) => void
+  ageWindows?: AgeWindowSettings
+  /** Saves age-window settings and dates; `timeCol` switches the timepoints at the same time. */
+  onAgeWindows?: (s: AgeWindowSettings | undefined, timeCol?: string | null) => void
 }
 
 function move<T>(arr: T[], i: number, d: number): T[] {
@@ -25,7 +30,7 @@ function move<T>(arr: T[], i: number, d: number): T[] {
   return out
 }
 
-export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn, onKeyChoice }: Props) {
+export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn, onKeyChoice, ageWindows, onAgeWindows }: Props) {
   const textCols = ds.columns.filter((c) => c.meta || c.numericShare < 0.8 || c.distinct <= 50).map((c) => c.name)
   const allCols = ds.headers
   const update = (patch: Partial<AnalysisConfig>) => setCfg({ ...cfg, ...patch })
@@ -160,6 +165,7 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
         </div>
       )}
 
+      {onAgeWindows && <AgeWindowsCard ds={ds} cfg={cfg} update={update} settings={ageWindows} onChange={onAgeWindows} />}
       <div className="card">
         <h2>Filters</h2>
         <p className="small muted">Restrict the analysis to a subset of animals, for example one sex.</p>

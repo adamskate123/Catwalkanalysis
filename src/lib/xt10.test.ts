@@ -50,11 +50,11 @@ describe('CatWalk XT 10 column names', () => {
     expect(metaRole('X-Unit_(mm/pixel)')).toBe('equipment')
   })
 
-  it('recognises every column except the undocumented OtherStatistics codes', () => {
-    const unknown = run.filter((h) => !metaRole(h) && !matchColumn(h))
-    expect(unknown.sort()).toEqual(
-      ['AB', 'GT', 'LK', 'LM', 'NO', 'RK', 'RM', 'TA'].map((c) => `OtherStatistics_${c}_(%)`).sort(),
-    )
+  it('recognises every column, including the body-contact codes', () => {
+    expect(run.filter((h) => !metaRole(h) && !matchColumn(h))).toEqual([])
+    // OtherStatistics_AB/TA/GT/NO/RM/RK/LM/LK (%) are labelled body contacts with the glass
+    const contacts = ['AB', 'GT', 'LK', 'LM', 'NO', 'RK', 'RM', 'TA'].map((c) => matchColumn(`OtherStatistics_${c}_(%)`)?.paramId)
+    expect(contacts.every((id) => id?.startsWith('contact_'))).toBe(true)
   })
 })
 

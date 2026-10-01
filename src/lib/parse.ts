@@ -1,4 +1,5 @@
 import Papa from 'papaparse'
+import { AGE_WINDOW_COL, addAgeColumns, type AgeInfo, type AgeWindowSettings } from './ageWindows'
 import readXlsxFile from 'read-excel-file/universal'
 import type { ColumnMatch, MetaRole } from './catalog'
 import { program, roleOf } from '../programs'
@@ -247,6 +248,10 @@ export interface Dataset {
   sources: string[]
   keys: KeyJoin[]
   notices: string[]
+  /** Ages at test and age windows (Setup → Age windows); null without an animal ID column. */
+  ageInfo?: AgeInfo | null
+  /** Display order of a column's values when it isn't natural order (age windows). */
+  valueOrder?: Record<string, string[]>
 }
 
 export const SOURCE_COL = 'Source file'
@@ -424,7 +429,12 @@ export function mergeTables(all: ParsedTable[], opts: MergeOptions = {}): Datase
       notices.push(w.notice)
     }
   }
-  return { headers, rows, columns: classifyColumns(headers, rows, keyCols), sources, keys, notices }
+  const age = addAgeColumns(headers, rows, opts.ageWindows, keys[0]?.dataColumn)
+  if (age.notice) notices.push(age.notice)
+  const columns = classifyColumns(headers, rows, keyCols)
+  // The age window is a timepoint like the instrument's own.
+  for (const c of columns) if (c.name === AGE_WINDOW_COL) c.meta = 'time'
+  return { headers, rows, columns, sources, keys, notices, ageInfo: age.info, valueOrder: age.valueOrder }
 }
 
 export const WEIGHT_COL = 'Body weight (g)'
@@ -548,6 +558,8 @@ export interface KeyChoice {
 export interface MergeOptions {
   /** Hand-picked joins, by key file label (KeyJoin.file). */
   keyChoices?: Record<string, KeyChoice>
+  /** Age windows and dates entered in Setup → Age windows. */
+  ageWindows?: AgeWindowSettings
 }
 
 const tokens = (s: string) => s.split(/[\s_\-/,;:]+/).filter(Boolean)

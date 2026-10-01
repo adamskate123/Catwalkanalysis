@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { TabGraphsExport } from './TabGraphsExport'
+import { AGE_WINDOW_COL } from '../lib/ageWindows'
+import { distinctValues } from '../lib/analysis'
 import type { AggregateResult, AnalysisConfig, Measure, TimeResults } from '../lib/analysis'
 import type { InterpretOptions } from '../lib/interpret'
 import type { Experiment } from '../lib/experiment'
@@ -29,7 +31,7 @@ interface Props {
   setOpt: (o: InterpretOptions) => void
   experiment: Experiment
   saveState: 'saved' | 'saving' | 'error' | 'off'
-  onUpdateExperiment: (e: Experiment) => void
+  onUpdateExperiment: (e: Experiment, cfgPatch?: Partial<AnalysisConfig>) => void
   onAddFiles: (files: LoadedFile[], session?: string) => string
   onDeleteExperiment: () => void
   agg: AggregateResult
@@ -97,6 +99,8 @@ export function Results(props: Props) {
   ]
 
   const showTimePicker = hasTime && tab !== 'time' && tab !== 'trials' && tab !== 'setup' && tab !== 'data' && tab !== 'experiment'
+  // With age windows, a switch between them and the data files' own timepoints.
+  const showSource = ds.headers.includes(AGE_WINDOW_COL) && tab !== 'setup' && tab !== 'data' && tab !== 'experiment'
   // Tabs that draw charts get "Export this tab's graphs".
   const chartTab = (['story', 'fingerprint', 'explore', 'trials', 'time', 'speed', 'weight'] as Tab[]).includes(tab)
   const tabLabel = tabs.find(([id]) => id === tab)?.[1] ?? tab
@@ -129,12 +133,30 @@ export function Results(props: Props) {
           </button>
         ))}
       </div>
-      {(showTimePicker || chartTab) && (
+      {(showTimePicker || chartTab || showSource) && (
         <div className="row no-print" style={{ marginBottom: 12, justifyContent: 'space-between' }}>
-          {showTimePicker ? (
+          {showTimePicker || showSource ? (
             <span className="row">
-              <span className="small muted">Timepoint:</span>
-              {results.map((r) => (
+              {showSource && (
+                <select
+                  value={cfg.timeCol ?? ''}
+                  onChange={(e) => setCfg({ ...cfg, timeCol: e.target.value || null, timeOrder: distinctValues(ds, e.target.value || null) })}
+                  style={{ width: 'auto' }}
+                  aria-label="Timepoints from"
+                >
+                  <option value={AGE_WINDOW_COL}>Age windows</option>
+                  {ds.columns
+                    .filter((c) => c.meta === 'time' && c.name !== AGE_WINDOW_COL)
+                    .map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  <option value="">No timepoints</option>
+                </select>
+              )}
+              {showTimePicker && <span className="small muted">Timepoint:</span>}
+              {showTimePicker && results.map((r) => (
                 <button key={r.time} className={`btn sm${r.time === time ? ' primary' : ''}`} onClick={() => setTime(r.time)} aria-pressed={r.time === time}>
                   {r.time}
                 </button>
@@ -181,6 +203,8 @@ export function Results(props: Props) {
             else delete next[file]
             props.onUpdateExperiment({ ...experiment, keyChoices: next })
           }}
+          ageWindows={experiment.ageWindows}
+          onAgeWindows={(next, timeCol) => props.onUpdateExperiment({ ...experiment, ageWindows: next }, timeCol !== undefined ? { timeCol } : undefined)}
         />
       )}
       </div>
