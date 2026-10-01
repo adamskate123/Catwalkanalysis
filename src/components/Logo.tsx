@@ -27,6 +27,13 @@ export function Logo({ size = 26, program = 'catwalk' }: { size?: number; progra
           <circle cx="16" cy="23.5" r="2.4" stroke="none" />
           <path d="M11 17c-3 1-4 4-4 7" fill="none" strokeWidth="1.4" />
         </g>
+      ) : program === 'weight' ? (
+        // A scale with a rising growth line
+        <g fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="6" y="20" width="20" height="6" rx="1.5" strokeWidth="2" />
+          <path d="M8 16l5-4 4 2 7-7" strokeWidth="2" />
+          <path d="M20 7h4v4" strokeWidth="2" />
+        </g>
       ) : program === 'openfield' ? (
         // An arena with a centre zone and a track
         <g fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round">

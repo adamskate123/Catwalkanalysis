@@ -55,7 +55,7 @@ export interface AgeInfo {
 }
 
 const DOB = /^(dob|d\.?o\.?b\.?|date of birth|birth ?date|birthday|born)$/i
-const TEST_DATE = /test(ing)? ?date|date (of )?test|date tested|test ?day|testdate/i
+const TEST_DATE = /test(ing)? ?date|date (of )?test|date tested|test ?day|testdate|^weigh(ing)?[- ]?(in )?date$/i
 
 export function windowsOf(s: Pick<AgeWindowSettings, 'mode' | 'values' | 'tolerance'>): AgeWindow[] {
   const vals = [...new Set(s.values.filter((v) => Number.isFinite(v) && v > 0))].sort((a, b) => a - b)

@@ -10,6 +10,7 @@ import { Fingerprint } from './tabs/Fingerprint'
 import { TimeTab } from './tabs/TimeTab'
 import { TrialsTab } from './tabs/TrialsTab'
 import { WeightTab } from './tabs/WeightTab'
+import { WeightRefTab } from './tabs/WeightRefTab'
 import { SpeedTab } from './tabs/SpeedTab'
 import type { TabProps } from './tabs/types'
 
@@ -86,7 +87,8 @@ function jobs(base: TabProps, only?: Set<string>): Job[] {
     const perTrial = measures.filter((m) => m.col !== undefined && m.def.id !== 'body_weight' && agg.trials.some((t) => Number.isFinite(t.values[m.key])))
     out.push({ scope: prog.trialsTab?.label ?? 'Trials', node: perTrial.map((m) => <TrialsTab key={m.key} {...base} pick={m.key} />) })
   }
-  const weight = base.measures.find((m) => m.def.id === 'body_weight')
+  if (prog.id === 'weight') out.push({ scope: 'Reference strain', node: <WeightRefTab {...base} /> })
+  const weight = prog.id === 'weight' ? undefined : base.measures.find((m) => m.def.id === 'body_weight')
   if (weight) {
     for (const t of times)
       out.push({

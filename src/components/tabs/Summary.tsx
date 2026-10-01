@@ -76,7 +76,7 @@ export function Summary(props: TabProps & { goSetup: () => void }) {
           <div className="sub">{program().features.paws ? 'incl. front/hind means and asymmetry' : program().trialDerived && agg.trials.length ? `incl. best/first/last ${program().runNoun}` : program().trialSummaries && agg.trials.length ? `incl. habituation per ${(program().trialColumn ?? 'interval').toLowerCase()}` : 'recognised and other numeric columns'}</div>
         </div>
         <div className="tile">
-          <div className="label">Changed vs {cfg.diseaseGroup ? 'control' : 'reference'}</div>
+          <div className="label">Changed vs {cfg.controlGroup ?? 'control'}</div>
           <div className="value">{nSig}</div>
           <div className="sub">
             p &lt; {opt.alpha}, |g| ≥ {opt.minEffect}

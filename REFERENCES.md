@@ -62,6 +62,15 @@ The phenotype patterns are the app’s own summaries of this literature. They gr
 1. Deacon RMJ. Measuring the strength of mice. J Vis Exp. 2013;(76):2610. [doi:10.3791/2610](https://doi.org/10.3791/2610)
 2. Aartsma-Rus A, van Putten M. Assessing functional performance in the mdx mouse model. J Vis Exp. 2014;(85):51303. [doi:10.3791/51303](https://doi.org/10.3791/51303)
 
+## Body weight (Weight Lab)
+
+*Used for:* The built-in C57BL/6J reference weights (weeks 3-24, by sex) used for z-scores and % of the reference mean, and the tutorial on growth curves.
+
+*JAX chart values cross-checked; Gargiulo et al. verified in PubMed.*
+
+1. The Jackson Laboratory. Body Weight Info - B6J (000664): body weight of C57BL/6J mice by week of age, mean and SD of up to 120 females and 120 males per age. <https://www.jax.org/jax-mice-and-services/strain-data-sheet-pages/body-weight-chart-000664>
+2. Gargiulo S, Gramanzini M, Megna R, et al. Evaluation of growth patterns and body composition in C57Bl/6J mice using dual energy X-ray absorptiometry. Biomed Res Int. 2014;2014:253067. [doi:10.1155/2014/253067](https://doi.org/10.1155/2014/253067)
+
 ## Statistical methods (all programs)
 
 *Used for:* Welch t-test, Mann–Whitney U, Kruskal–Wallis, Holm adjustment, Benjamini–Hochberg FDR and Hedges g as implemented in the app. Distribution functions follow Numerical Recipes; the unit tests check results against SciPy.

@@ -84,6 +84,19 @@ export const CAGEHANG_REFS: Reference[] = [
   },
 ]
 
+export const WEIGHT_REFS: Reference[] = [
+  {
+    id: 'jax000664',
+    text: 'The Jackson Laboratory. Body Weight Info - B6J (000664): body weight of C57BL/6J mice by week of age, mean and SD of up to 120 females and 120 males per age.',
+    url: 'https://www.jax.org/jax-mice-and-services/strain-data-sheet-pages/body-weight-chart-000664',
+  },
+  {
+    id: 'gargiulo2014',
+    text: 'Gargiulo S, Gramanzini M, Megna R, et al. Evaluation of growth patterns and body composition in C57Bl/6J mice using dual energy X-ray absorptiometry. Biomed Res Int. 2014;2014:253067.',
+    doi: '10.1155/2014/253067',
+  },
+]
+
 export const STATS_REFS: Reference[] = [
   {
     id: 'welch1947',
@@ -181,6 +194,13 @@ export const REFERENCE_GROUPS: ReferenceGroup[] = [
     use: 'Tutorial content (inverted screen / cage-lid hanging, cut-offs, trials), the holding impulse (body weight × hang time) and the weakness and fatigue patterns.',
     verified: 'Verified in PubMed',
     refs: CAGEHANG_REFS,
+  },
+  {
+    id: 'weight',
+    title: 'Body weight (Weight Lab)',
+    use: 'The built-in C57BL/6J reference weights (weeks 3-24, by sex) used for z-scores and % of the reference mean, and the tutorial on growth curves.',
+    verified: 'JAX chart values cross-checked; Gargiulo et al. verified in PubMed',
+    refs: WEIGHT_REFS,
   },
   {
     id: 'stats',

@@ -109,7 +109,8 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
   if (small.length) w.push({ level: 'warning', text: `Small groups (n < 5): ${small.join(', ')}. Treat p-values with caution and focus on effect sizes.` })
   const weight = tr.results.find((r) => r.measure.def.id === 'body_weight')
   const weightDiff = weight?.comparisons.find((c) => c.reference === cfg.controlGroup && c.pAdj < 0.05)
-  if (weightDiff && !cfg.weightAdjust)
+  // In Weight Lab weight is the outcome, not a covariate.
+  if (weightDiff && !cfg.weightAdjust && program().id !== 'weight')
     w.push({
       level: 'warning',
       text: `Body weight differs between ${weightDiff.group} and ${weightDiff.reference} (${weightDiff.diffPct > 0 ? '+' : ''}${weightDiff.diffPct.toFixed(0)}%, p = ${formatP(weightDiff.pAdj)}). ${program().id === 'rotarod' ? 'Heavier mice fall sooner from the rotarod, so part of a latency difference may reflect weight' : program().features.paws ? 'Print area, intensity and stride scale with body size' : 'Activity measures can depend on body size and condition'}; consider adjusting for body weight (Setup → Statistics).`,

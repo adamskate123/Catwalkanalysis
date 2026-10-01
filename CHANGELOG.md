@@ -3,6 +3,33 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.8.0] - 2026-10-01
+
+Tested with a real colony weight log (one row per animal, weekly weigh-in columns, and a C57BL/6J reference sheet).
+
+### Added
+
+- **Weight Lab**, a fifth program for body weight over time.
+  - **Reading the log:** a weight log with one column per weigh-in date becomes one row per weigh-in. Age at each weigh-in comes from the date of birth, and weeks of age are the timepoints. Several weigh-ins in the same week are averaged per animal. Per-animal summary columns in the log (latest weight, % change, flags) are not analysed.
+  - **Animal IDs:** when short IDs repeat across litters (e.g. "RF" in two litters), animals are identified by tag + toe/ear mark (e.g. "L2.1 RF"), the form CatWalk animal keys use.
+  - **Against your controls:** body weight and the z-score are compared with the control group at each week (Welch's t-test or Mann–Whitney, Holm-adjusted, Hedges' g), with a "low body weight / growth restriction" pattern.
+  - **Against a reference strain:** every weigh-in gets a z-score ((weight − reference mean) ÷ reference SD) and a % of the reference mean for the same sex and week of age.
+    - The built-in reference is C57BL/6J (JAX 000664, weeks 3–24). A reference sheet in the workbook (age in weeks, female/male mean and SD) replaces it.
+    - Ages outside the table are not extrapolated.
+  - **Reference strain tab:**
+    - growth curves by sex against the reference mean ± SD;
+    - z-scores over time;
+    - each group's z-scores against 0, week by week (one-sample t-test, BH FDR across weeks);
+    - each animal's average z-score across all its weigh-ins, against the reference and against the control group (Welch's t-test, Hedges' g).
+  - A tutorial, demo data and references (JAX body weight chart; Gargiulo et al. 2014).
+- **Statistics:** one-sample t-test and t-based 95% confidence intervals, checked against SciPy.
+
+### Changed
+
+- The Summary tile reads "Changed vs <control group>" instead of "vs reference".
+- Scores centred on 0 (z-scores) show no % change.
+- Age windows also find test dates in a "Weigh date" column.
+
 ## [2.7.1] - 2026-10-01
 
 ### Fixed

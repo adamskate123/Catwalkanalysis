@@ -7,13 +7,15 @@
 import type { ColumnMatch, MetaRole, ParamDef } from '../lib/catalog'
 import { metaRole as genericMetaRole } from '../lib/catalog'
 import type { Domain } from '../lib/interpret'
-import type { RawSheet } from '../lib/parse'
+import type { Cell, ParsedTable, RawSheet } from '../lib/parse'
+import type { WeightReference } from '../lib/weightRef'
 import { catwalk } from './catwalk'
 import { rotarod } from './rotarod'
 import { openfield } from './openfield'
 import { cagehang } from './cagehang'
+import { weight } from './weight'
 
-export type ProgramId = 'catwalk' | 'rotarod' | 'openfield' | 'cagehang'
+export type ProgramId = 'catwalk' | 'rotarod' | 'openfield' | 'cagehang' | 'weight'
 
 /** Per-animal values derived from the ordered trials of one session. */
 export interface TrialDerived {
@@ -70,9 +72,22 @@ export interface ProgramDef {
   features: { speed: boolean; paws: boolean }
   /** Prefix for exported file names. */
   filePrefix: string
+  /**
+   * Name of the column that date-headed numeric columns melt into (one row per date),
+   * e.g. "Weigh date" for a weekly weight log. Other programs leave date columns alone.
+   */
+  dateColumn?: string
+  /** Adjusts each data table before merging (e.g. making animal IDs unique); may return a notice. */
+  prepare?: (t: ParsedTable) => { table: ParsedTable; notice?: string }
+  /**
+   * Adds derived columns to the merged rows (e.g. age at weighing, week of age and
+   * the comparison with a reference strain). `references` are reference-weight
+   * tables found among the loaded sheets.
+   */
+  augment?: (headers: string[], rows: Cell[][], references: ParsedTable[]) => { notices: string[]; reference?: WeightReference | null }
 }
 
-export const PROGRAMS: ProgramDef[] = [catwalk, rotarod, openfield, cagehang]
+export const PROGRAMS: ProgramDef[] = [catwalk, rotarod, openfield, cagehang, weight]
 
 let active: ProgramDef = catwalk
 const byId: Record<string, Record<string, ParamDef>> = {}

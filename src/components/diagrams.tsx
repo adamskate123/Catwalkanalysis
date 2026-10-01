@@ -1,6 +1,8 @@
 // Explanatory diagrams for the tutorial. Colours use CSS variables so they
 // follow the light/dark theme.
 
+import { C57BL6J } from '../lib/weightRef'
+
 const T = 'var(--text)'
 const T2 = 'var(--text-2)'
 const M = 'var(--muted)'
@@ -407,6 +409,49 @@ export function CageHangDiagram() {
       </text>
       <text x={286} y={170} fontSize={11} fill={T2}>
         up to the cut-off
+      </text>
+    </svg>
+  )
+}
+
+/** Body weight with age: the reference strain's mean ± 2 SD band and a group falling behind it. */
+export function WeightDiagram() {
+  const ref = C57BL6J.weeks.filter((w) => w.m)
+  const x = (week: number) => 50 + ((week - 3) / 21) * 340
+  const y = (g: number) => 180 - ((g - 5) / 40) * 160
+  const line = (pts: [number, number][]) => pts.map(([a, b], i) => `${i ? 'L' : 'M'}${x(a).toFixed(1)} ${y(b).toFixed(1)}`).join(' ')
+  const band =
+    line(ref.map((w) => [w.week, w.m!.mean + 2 * w.m!.sd])) +
+    ' ' +
+    line([...ref].reverse().map((w) => [w.week, w.m!.mean - 2 * w.m!.sd])).replace(/^M/, 'L') +
+    ' Z'
+  const group = ref.filter((w) => w.week >= 5 && w.week <= 18).map((w): [number, number] => [w.week, w.m!.mean * (1 - Math.min(0.2, Math.max(0, w.week - 7) * 0.025))])
+  return (
+    <svg viewBox="0 0 420 210" role="img" aria-label="Growth curve: body weight rises with age; the reference strain's mean is a dashed line inside a shaded band of plus or minus two standard deviations, and a mutant group's weights fall progressively below the band." fontFamily={FONT}>
+      <path d={band} fill={A} opacity={0.12} />
+      <path d={line(ref.map((w) => [w.week, w.m!.mean]))} fill="none" stroke={M} strokeWidth={2} strokeDasharray="6 4" />
+      <path d={line(group)} fill="none" stroke="#eb6834" strokeWidth={2.5} />
+      {group.map(([a, b]) => (
+        <circle key={a} cx={x(a)} cy={y(b)} r={3} fill="#eb6834" />
+      ))}
+      <line x1={50} y1={180} x2={390} y2={180} stroke={T2} />
+      <line x1={50} y1={20} x2={50} y2={180} stroke={T2} />
+      {[4, 8, 12, 16, 20, 24].map((w) => (
+        <text key={w} x={x(w)} y={195} fontSize={10} fill={M} textAnchor="middle">
+          {w}
+        </text>
+      ))}
+      <text x={220} y={208} fontSize={10.5} fill={T2} textAnchor="middle">
+        Age (weeks)
+      </text>
+      <text transform="translate(16 100) rotate(-90)" fontSize={10.5} fill={T2} textAnchor="middle">
+        Body weight (g)
+      </text>
+      <text x={262} y={46} fontSize={10.5} fill={M}>
+        Reference mean ± 2 SD
+      </text>
+      <text x={262} y={150} fontSize={10.5} fill="#eb6834">
+        Mutant group (z ≈ −2)
       </text>
     </svg>
   )

@@ -61,7 +61,7 @@ export function refinements(ds: Dataset, measures: Measure[], agg: AggregateResu
   }
 
   // 1b. Body weight differs between groups
-  const weightRes = tr?.results.find((r) => r.measure.def.id === 'body_weight')
+  const weightRes = program().id === 'weight' ? undefined : tr?.results.find((r) => r.measure.def.id === 'body_weight')
   if (weightRes) {
     const active = Boolean(cfg.weightAdjust)
     const differs = weightRes.comparisons.find((c) => c.reference === cfg.controlGroup && c.pAdj < 0.05)
