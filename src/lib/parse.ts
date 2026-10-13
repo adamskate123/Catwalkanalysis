@@ -5,8 +5,11 @@ import readXlsxFile from 'read-excel-file/universal'
 import type { ColumnMatch, MetaRole } from './catalog'
 import { program, roleOf } from '../programs'
 import { readPrismProject, reshapeTable, type ImportOptions } from './importers'
+import { RECORDING_COL, readPasFile } from './pas'
+import { collectChecks, type DataCheck } from './dataChecks'
 
-const matchColumn = (name: string) => program().matchColumn(name)
+/** Sentences (instructions on a "How to use" sheet) are never parameter names. */
+const matchColumn = (name: string) => (name.length > 100 || name.split(/\s+/).length > 14 ? null : program().matchColumn(name))
 const metaRole = roleOf
 
 export type Cell = string | number | null
@@ -53,10 +56,15 @@ function normaliseCell(v: unknown): Cell {
 /** Placeholders CatWalk and Excel use for "no value". */
 export const MISSING = /^(nan|n\/a|na|-|—|null|#n\/a|#div\/0!|#value!)$/i
 
-export async function readFile(file: File, opts: ImportOptions = {}): Promise<RawSheet[]> {
+/** Reads one file into sheets; `onProgress` reports progress (0–1) on files that take a while (PAS databases). */
+export async function readFile(file: File, opts: ImportOptions = {}, onProgress?: (share: number) => void): Promise<RawSheet[]> {
   const name = file.name
   const lower = name.toLowerCase()
   if (lower.endsWith('.prism')) return readPrismProject(new Uint8Array(await file.arrayBuffer()), name, opts)
+  if (lower.endsWith('.mdb') || lower.endsWith('.accdb')) {
+    if (program().id !== 'openfield') throw new Error(`${name}: Access databases from the SDI Photobeam Activity System are open field data. Switch to Open Field Lab to load them.`)
+    return readPasFile(new Uint8Array(await file.arrayBuffer()), name, onProgress)
+  }
   if (lower.endsWith('.pzfx')) {
     throw new Error(`${name}: older Prism .pzfx files aren't read yet. In Prism 10, save the project as .prism, or copy the data table into Excel.`)
   }
@@ -267,6 +275,8 @@ export interface Dataset {
   valueOrder?: Record<string, string[]>
   /** Reference strain used for body-weight comparisons (Weight Lab). */
   reference?: WeightReference | null
+  /** Runs flagged on import for review (Setup → Data checks). */
+  checks?: DataCheck[]
 }
 
 export const SOURCE_COL = 'Source file'
@@ -384,7 +394,8 @@ export function mergeTables(input: ParsedTable[], opts: MergeOptions = {}): Data
   // file with sex.
   const idCols = headers
     .map((h, i) => ({ h, i, role: metaRole(h) }))
-    .filter(({ h, role }) => /^experiment$/i.test(h.trim()) || role === 'subject' || role === 'trial' || role === 'run' || (role === 'time' && !/description/i.test(h)))
+    // A PAS recording (session and chamber) keeps two runs of one animal on one day apart.
+    .filter(({ h, role }) => /^experiment$/i.test(h.trim()) || h === RECORDING_COL || role === 'subject' || role === 'trial' || role === 'run' || (role === 'time' && !/description/i.test(h)))
   const sexCol = headers.findIndex((h) => metaRole(h) === 'sex')
   let replaced = 0
   if (idCols.some((c) => c.role === 'subject' || c.role === 'trial')) {
@@ -461,7 +472,8 @@ export function mergeTables(input: ParsedTable[], opts: MergeOptions = {}): Data
   const columns = classifyColumns(headers, rows, keyCols)
   // The age window is a timepoint like the instrument's own.
   for (const c of columns) if (c.name === AGE_WINDOW_COL) c.meta = 'time'
-  return { headers, rows, columns, sources, keys, notices, ageInfo: age.info, valueOrder: age.valueOrder, reference: extra?.reference ?? null }
+  const checks = collectChecks(headers, rows)
+  return { headers, rows, columns, sources, keys, notices, ageInfo: age.info, valueOrder: age.valueOrder, reference: extra?.reference ?? null, checks }
 }
 
 export const WEIGHT_COL = 'Body weight (g)'

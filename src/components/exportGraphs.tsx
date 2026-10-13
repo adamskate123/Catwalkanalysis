@@ -4,6 +4,7 @@ import { flushSync } from 'react-dom'
 import { chartFiles, collectCharts, type GraphFormat } from '../lib/export'
 import { LIGHT_THEME, seriesColor } from '../lib/theme'
 import { timeCaption } from '../lib/ageWindows'
+import { trialMeasures } from '../lib/analysis'
 import { hasTrialAnalysis, program } from '../programs'
 import { MeasureDots, TimeCourse } from './tabs/figures'
 import { Fingerprint } from './tabs/Fingerprint'
@@ -84,7 +85,7 @@ function jobs(base: TabProps, only?: Set<string>): Job[] {
     })
   }
   if (hasTrialAnalysis(prog) && agg.trials.length > 0) {
-    const perTrial = measures.filter((m) => m.col !== undefined && m.def.id !== 'body_weight' && agg.trials.some((t) => Number.isFinite(t.values[m.key])))
+    const perTrial = trialMeasures(measures, agg)
     out.push({ scope: prog.trialsTab?.label ?? 'Trials', node: perTrial.map((m) => <TrialsTab key={m.key} {...base} pick={m.key} />) })
   }
   if (prog.id === 'weight') out.push({ scope: 'Reference strain', node: <WeightRefTab {...base} /> })

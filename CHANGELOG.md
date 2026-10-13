@@ -3,6 +3,32 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.9.0] - 2026-10-13
+
+Tested with a real SDI PAS database (230 MB; 77 sessions, 85 animals, 1.2 million beam events) and a colony weights workbook as the animal key.
+
+### Added
+
+- **Open Field Lab reads SDI Photobeam Activity System databases (.mdb)** directly, in the browser, with a progress count while reading.
+  - **One row per animal × run × interval** (PAS's 5-min intervals); the run date is the timepoint, so age windows work when the key has dates of birth.
+  - **PAS's own counts:** ambulatory, centre and periphery ambulatory, fine movements and rearing.
+  - **From the beam events, as PAS's data reduction does it:** distance, mean speed, resting time, centre time (s and %) and centre entries. Checked against the sessions PAS had reduced: distance, resting time and centre entries match exactly (80 of 80 animal-intervals), centre time to 0.1 s.
+  - **Totals and per interval:** each measure comes as a session total and per interval. Habituation curves and first/last/% change use the per-interval values.
+  - **Genotype and sex from the animal key first** (e.g. a weights workbook, joined by tag + toe/ear mark). Animals the key doesn't list take their most common PAS chamber label, translated into the key's genotype names where the key shows what a PAS code means (e.g. "AA" → "Mut/Mut").
+- **Data checks** (Setup → Data checks, with a warning on the Summary): runs that look inconsistent, each with an *Exclude* box and *Exclude all* / *Keep all* per kind:
+  - runs that stopped early (excluded by default);
+  - the same animal tested twice on one day (the most complete, latest run is used; the other is excluded by default, with a hint when both runs are complete that an ID may have been mistyped);
+  - PAS labels that disagree between an animal's runs (e.g. sex typed differently), or with the animal key;
+  - runs without a beam-event log (counts kept, distance and centre measures blank).
+  - Excluded runs are left out of every analysis but stay in the data; *Reset to the defaults* undoes your choices, which are saved with the experiment.
+- New open field measures: **centre and periphery ambulatory counts** (centre ambulatory counts also count towards the centre-avoidance patterns) and **fine movements**. Ambulatory counts also get a first → last interval change for habituation.
+
+### Fixed
+
+- Sentences on instruction sheets (e.g. a workbook's "How to Use" tab) are no longer read as parameter columns, so a weights workbook works as an animal key in every program.
+- "Rearing counts", "Stereotypy counts" and similar columns are no longer read as line crossings.
+- Long file names and IDs wrap on phones instead of widening the page, and the Habituation tab's measure menu fits the screen.
+
 ## [2.8.0] - 2026-10-01
 
 Tested with a real colony weight log (one row per animal, weekly weigh-in columns, and a C57BL/6J reference sheet).

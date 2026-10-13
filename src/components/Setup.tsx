@@ -1,6 +1,7 @@
 import { DEFAULT_MAX_VARIATION, combineGroups, isControlLike, distinctValues, groupDefaults, groupMembers, splitGroup, type AnalysisConfig, type Measure } from '../lib/analysis'
 import { CombineGroups } from './CombineGroups'
 import { AgeWindowsCard } from './AgeWindowsCard'
+import { DataChecksCard } from './DataChecksCard'
 import type { AgeWindowSettings } from '../lib/ageWindows'
 import { program } from '../programs'
 import type { InterpretOptions } from '../lib/interpret'
@@ -64,6 +65,7 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
 
   return (
     <>
+      {ds.checks && ds.checks.length > 0 && <DataChecksCard checks={ds.checks} cfg={cfg} update={update} />}
       <div className="card">
         <h2>Columns</h2>
         <p className="small muted">These were detected automatically. Change them if the guess is wrong.</p>

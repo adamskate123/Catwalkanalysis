@@ -1,8 +1,10 @@
 // Open field program: locomotor activity and centre avoidance in a novel arena,
-// usually tracked with Noldus EthoVision XT. Exports are EthoVision statistics
-// tables (one row per trial/animal) or Excel/Prism tables typed up by hand.
+// tracked with Noldus EthoVision XT (statistics exports, one row per trial) or the
+// SDI Photobeam Activity System (its .mdb database, read directly; see lib/pas.ts),
+// or Excel/Prism tables typed up by hand.
 
-import { BODY_WEIGHT, normalizeKey, splitStat, type ColumnMatch, type MetaRole, type ParamDef } from '../lib/catalog'
+import { BODY_WEIGHT, metaRole as genericMetaRole, normalizeKey, splitStat, type ColumnMatch, type MetaRole, type ParamDef } from '../lib/catalog'
+import { pasAugment } from '../lib/pas'
 import { gauss, rng } from '../lib/demo'
 import type { Domain } from '../lib/interpret'
 import type { Cell, RawSheet } from '../lib/parse'
@@ -101,6 +103,31 @@ const PARAMS: ParamDef[] = [
     up: 'Hesitation to enter the exposed centre: anxiety-like behaviour or low activity.',
     down: 'Earlier entry: anxiolytic effect, disinhibition or hyperactivity.',
   },
+  // Beam-break systems (SDI PAS): ambulatory counts split by zone (checked before centre entries)
+  {
+    id: 'center_ambulatory',
+    label: 'Centre ambulatory counts',
+    short: 'Centre amb.',
+    unit: 'n',
+    category: 'anxiety',
+    perPaw: false,
+    match: new RegExp(`${CENTER}.*ambulat|ambulat.*${CENTER}`),
+    description: 'Ambulatory beam breaks (moves across successive beams) made while the animal was in the centre zone (SDI PAS: CenA).',
+    up: 'More locomotion in the exposed centre: low anxiety-like behaviour or hyperactivity.',
+    down: 'Less locomotion in the centre: centre avoidance (anxiety-like) or low activity overall.',
+  },
+  {
+    id: 'periphery_ambulatory',
+    label: 'Periphery ambulatory counts',
+    short: 'Periphery amb.',
+    unit: 'n',
+    category: 'anxiety',
+    perPaw: false,
+    match: new RegExp(`${BORDER}.*ambulat|ambulat.*${BORDER}`),
+    description: 'Ambulatory beam breaks made while the animal was near the walls (SDI PAS: PerA).',
+    up: 'More locomotion along the walls.',
+    down: 'Less locomotion along the walls: hypoactivity.',
+  },
   {
     id: 'center_entries',
     label: 'Centre entries',
@@ -162,6 +189,19 @@ const PARAMS: ParamDef[] = [
     down: 'Less resting: hyperactivity.',
   },
   {
+    id: 'fine_movements',
+    label: 'Fine movements',
+    short: 'Fine mov.',
+    unit: 'n',
+    category: 'exploration',
+    perPaw: false,
+    match: /^fine|finemove/,
+    description:
+      'Beam breaks without moving to a new position: in photobeam systems, repeated breaks of the same beam, as during grooming, sniffing and head movements (SDI PAS: fine movements, XF + YF).',
+    up: 'More grooming-like or stationary activity: repetitive behaviour, stress-induced grooming, or less locomotion with the animal still active in place.',
+    down: 'Less stationary activity: the animal is resting, or moving from place to place instead.',
+  },
+  {
     id: 'moving_time',
     label: 'Time moving',
     short: 'Moving',
@@ -204,7 +244,8 @@ const PARAMS: ParamDef[] = [
     unit: 'n',
     category: 'locomotion',
     perPaw: false,
-    match: /crossing|linecross|squares?|beambreak|breaks|ambulatorycount|counts?$/,
+    // Plain "counts" columns are activity counts, unless another measure names them (rearing counts, stereotypy counts).
+    match: /^(?!.*(rear|vertical|stereotyp|groom|fine|fecal|boli|entr))(.*(crossing|linecross|squares?|beambreak|breaks|ambulatorycount)|.*counts?$)/,
     description: 'Manually scored line crossings or photobeam breaks: an activity count used instead of tracked distance.',
     down: 'Hypoactivity.',
     up: 'Hyperactivity.',
@@ -329,6 +370,7 @@ const DOMAINS: Domain[] = [
       { param: 'center_time_pct', where: 'run', dir: -1 },
       { param: 'center_entries', where: 'run', dir: -1 },
       { param: 'center_distance', where: 'run', dir: -1 },
+      { param: 'center_ambulatory', where: 'run', dir: -1 },
       { param: 'center_latency', where: 'run', dir: 1 },
       { param: 'periphery_time', where: 'run', dir: 1 },
       { param: 'defecation', where: 'run', dir: 1 },
@@ -346,6 +388,7 @@ const DOMAINS: Domain[] = [
       { param: 'center_time', where: 'run', dir: 1 },
       { param: 'center_time_pct', where: 'run', dir: 1 },
       { param: 'center_entries', where: 'run', dir: 1 },
+      { param: 'center_ambulatory', where: 'run', dir: 1 },
       { param: 'center_latency', where: 'run', dir: -1 },
       { param: 'periphery_time', where: 'run', dir: -1 },
     ],
@@ -368,6 +411,7 @@ const DOMAINS: Domain[] = [
       { param: 'velocity:change', where: 'run', dir: 1 },
       { param: 'moving_time:change', where: 'run', dir: 1 },
       { param: 'immobile_time:change', where: 'run', dir: -1 },
+      { param: 'crossings:change', where: 'run', dir: 1 },
     ],
   },
   {
@@ -409,6 +453,9 @@ function matchColumn(name: string): ColumnMatch | null {
 function metaRole(name: string): MetaRole | null | undefined {
   const n = name.trim().replace(/_/g, ' ')
   if (/^(arena|zone|chamber|box|tracking|video|recording|track)\b/i.test(n)) return 'other'
+  // SDI PAS import: the PAS labels and session are descriptive; the run date is the timepoint.
+  if (/^pas\b|\(pas\)$|^data check/i.test(n)) return 'other'
+  if (/^test\s*date$/i.test(n)) return 'time'
   // Time bins within a session (e.g. "0-5 min") behave like timepoints.
   // Intervals / time bins within a session are ordered repeats (habituation), not timepoints.
   if (/^(time\s*)?bin|^interval|^block|^epoch|^minutes?$/i.test(n)) return 'run'
@@ -491,10 +538,10 @@ export const openfield: ProgramDef = {
   id: 'openfield',
   name: 'Open Field Lab',
   test: 'open field',
-  instrument: 'EthoVision XT',
+  instrument: 'EthoVision XT or SDI PAS',
   tagline: 'Open field activity and anxiety-like behaviour',
   lede:
-    'Load open field results exported from EthoVision XT, or Excel and Prism tables. Open Field Lab recognises activity and centre/periphery measures, compares groups and timepoints, and points out patterns of hypo- or hyperactivity and anxiety-like behaviour.',
+    'Load open field results exported from EthoVision XT, the SDI Photobeam Activity System database (.mdb), or Excel and Prism tables. Open Field Lab recognises activity and centre/periphery measures, compares groups and timepoints, and points out patterns of hypo- or hyperactivity and anxiety-like behaviour.',
   params: PARAMS,
   categoryLabels: CATEGORY_LABELS,
   categoryOrder: ['locomotion', 'anxiety', 'exploration', 'habituation', 'body', 'other'],
@@ -517,10 +564,15 @@ export const openfield: ProgramDef = {
   primaryColumn: 'Distance moved (cm)',
   features: { speed: false, paws: false },
   filePrefix: 'openfield',
+  // SDI PAS databases: genotype and sex from the animal key, PAS labels as the backup.
+  augment: (headers, rows) => pasAugment(headers, rows, (h) => {
+    const o = metaRole(h)
+    return o === undefined ? genericMetaRole(h) : o
+  }) ?? { notices: [] },
   steps: [
     {
-      title: 'Export from EthoVision',
-      text: 'In EthoVision XT, open Analysis → Statistics and export the trial statistics (one row per trial) to Excel. Include your independent variables (genotype, treatment, age) and zone measures for the centre and border.',
+      title: 'Export from EthoVision, or load the PAS database',
+      text: 'In EthoVision XT, open Analysis → Statistics and export the trial statistics (one row per trial) to Excel, with your independent variables (genotype, treatment, age) and centre and border zone measures. For the SDI Photobeam Activity System, load its database (e.g. PASdata_001.mdb) as it is, together with an animal key such as a weights workbook.',
     },
     {
       title: 'Check the setup',

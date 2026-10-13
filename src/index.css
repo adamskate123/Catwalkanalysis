@@ -282,6 +282,12 @@ main {
   margin-bottom: 16px;
   min-width: 0;
 }
+/* Long file names and IDs (no spaces) wrap instead of widening the page on phones. */
+.card,
+.notice,
+.file-list {
+  overflow-wrap: anywhere;
+}
 .card > h2:first-child,
 .card > h3:first-child {
   margin-top: 0;

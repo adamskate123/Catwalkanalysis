@@ -2,6 +2,8 @@ import { program } from '../programs'
 import { COMPLIANT_DURATION, DEFAULT_MAX_VARIATION } from './analysis'
 import { toNumber } from './parse'
 import type { Dataset } from './parse'
+import { excludedRecordings } from './dataChecks'
+import { LABEL_SOURCE_COL } from './pas'
 import {
   formatNum,
   formatP,
@@ -53,8 +55,17 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
         level: 'warning',
         text: `Acquisition settings differ between recordings (${varying.join(', ')}). Intensity and area parameters are only comparable when camera gain, intensity threshold and lighting are identical.`,
       })
+    if (ds.checks?.length) {
+      const out = excludedRecordings(ds.checks, cfg.runExclusions).size
+      w.push({
+        level: 'warning',
+        text: `${ds.checks.length} runs look inconsistent (stopped early, tested twice on one day, or labels that disagree); ${out} ${out === 1 ? 'is' : 'are'} left out. Review them under Setup → Data checks.`,
+      })
+    }
+    // PAS databases: animals missing from the key take their PAS label instead (explained in a notice).
+    const pasBackup = ds.headers.includes(LABEL_SOURCE_COL)
     for (const k of ds.keys) {
-      if (k.unmatchedData.length)
+      if (k.unmatchedData.length && !pasBackup)
         w.push({
           level: 'warning',
           text: `Animal key ${k.file}: no entry for ${k.unmatchedData.join(', ')} (matched on ${k.dataColumn} = ${k.keyColumn}). Check the join, or pick the ID columns by hand, under Setup → Animal key.`,
