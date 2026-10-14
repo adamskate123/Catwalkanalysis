@@ -3,6 +3,16 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.9.1] - 2026-10-14
+
+### Fixed
+
+- **Weights files are also used as an animal key.** A weights file with one row per weigh-in (animal ID, weight, weigh date) that also lists each animal's date of birth, genotype or sex used to add only body weight. Now the columns that stay the same for each animal are joined like an animal key as well, so the date of birth gives each run's age at test and the age windows, and genotype and sex group the animals (for SDI PAS data, ahead of the PAS chamber labels).
+  - Columns the data already have are not repeated.
+  - An animal whose rows disagree on a column (e.g. a tag reused in another colony) is left blank for that column.
+- **Weigh-ins are matched by date** when the weights file has weigh dates and the data have test dates (e.g. PAS runs): each run takes the animal's weigh-in nearest its test date, within 7 days.
+- When two keys both give dates of birth (or genotypes) for different animals, they fill one column instead of adding a second "(key)" copy, so age windows see every animal.
+
 ## [2.9.0] - 2026-10-13
 
 Tested with a real SDI PAS database (230 MB; 77 sessions, 85 animals, 1.2 million beam events) and a colony weights workbook as the animal key.

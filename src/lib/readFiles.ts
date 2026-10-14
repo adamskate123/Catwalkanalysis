@@ -1,6 +1,6 @@
 import { program } from '../programs'
 import { getImportOptions } from './importers'
-import { isKeyTable, isWeightTable, pickTables, readFile, type ParsedTable } from './parse'
+import { isKeyTable, isWeightTable, pickTables, readFile, weightKeyTable, type ParsedTable } from './parse'
 
 export interface LoadedFile {
   name: string
@@ -25,11 +25,15 @@ export async function readSpreadsheets(
       const tables = pickTables(sheets, opts)
       if (!tables.length || !tables.some((t) => t.rows.length)) throw new Error(`${f.name}: no data rows found.`)
       const isKey = tables.every(isKeyTable)
-      if (tables.every(isWeightTable))
+      if (tables.every(isWeightTable)) {
+        const described = [...new Set(tables.flatMap((t) => weightKeyTable(t, [])?.headers.slice(1) ?? []))]
         messages.push({
           level: 'info',
-          text: `${f.name}: body weights. Loaded with ${program().test} data, each animal's weight is matched by ID (and age window) and can be used as a covariate; loaded on its own, body weight is analysed like any parameter.`,
+          text:
+            `${f.name}: body weights. Loaded with ${program().test} data, each animal's weight is matched by ID (and test date or age window) and can be used as a covariate; loaded on its own, body weight is analysed like any parameter.` +
+            (described.length ? ` Its columns describing each animal (${described.join(', ')}) are also joined like an animal key, so a date of birth gives ages and age windows.` : ''),
         })
+      }
       else if (isKey)
         messages.push({
           level: 'info',

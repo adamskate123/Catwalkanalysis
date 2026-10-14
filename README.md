@@ -1,6 +1,6 @@
 # Behavior Lab · Gait, Rotarod, Open Field, Cage Hang, Weight
 
-**Version 2.9.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 2.9.1**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
 A web app that turns rodent behavioural data into structured graphs, statistics and a written phenotype summary, with a built-in tutorial for each test. It contains five programs; switch between them by clicking the name and icon at the top left:
 
@@ -38,7 +38,7 @@ It runs in any modern browser on **phones, tablets and desktops**, and can be in
   - z-scores over time;
   - one-sample t-tests of each group's z-scores against 0 week by week, with Benjamini–Hochberg FDR;
   - each animal's average z-score across all its weigh-ins, tested against the reference and against the control group (Welch's t-test, Hedges' g).
-- **Body weight** (all programs): load a weights file (Excel or Prism) with the behavioural data and each animal's weight is matched by ear tag, age window and sex. Weight is analysed as a parameter, shown in a **Weight check** tab, and can be used as a covariate (Setup → Statistics → Adjust for body weight; pooled within-group slope, ANCOVA-style).
+- **Body weight** (all programs): load a weights file (Excel or Prism) with the behavioural data and each animal's weight is matched by ear tag, age window and sex, or to the weigh-in nearest each test date (within 7 days) when both files have dates. The weights file also serves as an animal key: its columns that describe each animal (date of birth, genotype, sex) are joined, so the date of birth gives ages at test and age windows. Weight is analysed as a parameter, shown in a **Weight check** tab, and can be used as a covariate (Setup → Statistics → Adjust for body weight; pooled within-group slope, ANCOVA-style).
 - **Combine groups** under Setup → Groups (e.g. several wild-type cohorts analysed as one control) and split them again; the Story tab offers this as a switch when several groups look like controls.
 - Everything below that is not specific to paws or walking speed applies to all five programs: Summary, Story, fingerprint, Parameters, Over time, filters, statistics, Prism export and saved experiments.
 

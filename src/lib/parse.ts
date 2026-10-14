@@ -435,14 +435,26 @@ export function mergeTables(input: ParsedTable[], opts: MergeOptions = {}): Data
   const keyCols = new Set<string>()
   let keyWeights: Cell[] | null = null
   let keyWeightFile = ''
-  for (const kt of mergeKeyTables(keyTables)) {
+  // A weights file also describes its animals (date of birth, genotype, sex): it doubles as an animal key.
+  const weightKeys = weightTables.map((t) => weightKeyTable(t, headers)).filter((t): t is ParsedTable => t !== null)
+  for (const kt of [...mergeKeyTables(keyTables), ...weightKeys]) {
     const label = kt.sheet ? `${kt.file} › ${kt.sheet}` : kt.file
     const j = joinKey(headers, rows, kt, opts.keyChoices?.[label], !weightTables.length && !keyWeights && !headers.includes(WEIGHT_COL))
     if (!j) continue
     keys.push(j.info)
-    for (const h of j.info.added) keyCols.add(h)
-    headers.push(...j.info.added)
-    rows.forEach((r, i) => r.push(...j.values[i]))
+    // A column an earlier key already added (e.g. DOB from a second key) fills its gaps instead of repeating.
+    const fresh: number[] = []
+    j.info.added.forEach((h, k) => {
+      const base = h.replace(/ \(key\)$/, '')
+      const bi = keyCols.has(base) ? headers.indexOf(base) : -1
+      if (bi < 0) return void fresh.push(k)
+      rows.forEach((r, i) => {
+        if (r[bi] === null && j.values[i][k] !== null) r[bi] = j.values[i][k]
+      })
+    })
+    for (const k of fresh) keyCols.add(j.info.added[k])
+    headers.push(...fresh.map((k) => j.info.added[k]))
+    rows.forEach((r, i) => r.push(...fresh.map((k) => j.values[i][k])))
     if (j.weights) {
       keyWeights = j.weights
       keyWeightFile = j.info.file
@@ -509,11 +521,71 @@ export function isWeightTable(t: ParsedTable): boolean {
 }
 
 /**
+ * The animals described in a weights file: its columns that stay the same for
+ * each animal (date of birth, genotype, sex, …), one row per animal, for joining
+ * as an animal key. Weights, weigh dates and timepoints are left out, and so are
+ * columns the data already have. Null when nothing new remains.
+ */
+export function weightKeyTable(t: ParsedTable, dataHeaders: string[]): ParsedTable | null {
+  const si = t.headers.findIndex((h) => metaRole(h) === 'subject')
+  if (si < 0) return null
+  const byAnimal = new Map<string, Cell[][]>()
+  for (const r of t.rows) {
+    const id = norm(r[si])
+    if (!id) continue
+    if (!byAnimal.has(id)) byAnimal.set(id, [])
+    byAnimal.get(id)!.push(r)
+  }
+  if (byAnimal.size < 2) return null
+  const cols = t.headers
+    .map((h, i) => ({ h, i }))
+    .filter(({ h, i }) => {
+      if (i === si) return true
+      const role = metaRole(h)
+      if (isWeightName(h) || dataHeaders.includes(h) || role === 'time' || role === 'run' || role === 'trial' || role === 'nruns') return false
+      // Same value on all of an animal's rows, for (nearly) every animal.
+      let filled = 0
+      let mixed = 0
+      for (const rs of byAnimal.values()) {
+        const vals = new Set(rs.map((r) => norm(r[i])).filter(Boolean))
+        if (vals.size) filled++
+        if (vals.size > 1) mixed++
+      }
+      return filled > 0 && mixed <= Math.max(1, Math.floor(byAnimal.size * 0.1))
+    })
+  if (cols.length < 2) return null
+  // An animal whose rows disagree (e.g. a tag reused in another colony) gets no value for that column.
+  const rows = [...byAnimal.values()].map((rs) =>
+    cols.map(({ i }) => {
+      const vals = rs.map((r) => r[i]).filter((c) => c !== null)
+      return new Set(vals.map(norm)).size === 1 ? vals[0] : null
+    }),
+  )
+  return { file: t.file, sheet: t.sheet, headerRow: 0, headers: cols.map(({ h }) => h), rows }
+}
+
+/** Weigh-in dates in a weights file: a column of dates that isn't the date of birth. */
+function weighDateIndex(t: ParsedTable): number {
+  return t.headers.findIndex((h, i) => !/dob|birth|born/i.test(h) && metaRole(h) !== 'time' && parseDayShare(t.rows.map((r) => r[i])) >= 0.8)
+}
+
+/** Test dates in the data: a timepoint column holding dates, or a test-date column. */
+function testDateIndex(headers: string[], rows: Cell[][]): number {
+  const t = headers.findIndex((h) => metaRole(h) === 'time' && !/description/i.test(h))
+  if (t >= 0 && rows.some((r) => parseDay(r[t]) !== null)) return t
+  return headers.findIndex((h, i) => /test(ing)?\s*date|date\s*(of\s*)?test|date tested/i.test(h) && rows.some((r) => parseDay(r[i]) !== null))
+}
+
+/**
  * Adds body weight to each data row from weight tables, matched by animal ID
  * and, when both have one, by timepoint (and sex). Several weighings in the
- * same window are averaged.
+ * same window are averaged. When the weights have weigh-in dates and the data
+ * have test dates, each run takes the animal's weigh-in nearest its test date
+ * (within WEIGH_WINDOW_DAYS).
  */
 function joinWeights(headers: string[], rows: Cell[][], tables: ParsedTable[]): { values: Cell[]; notice: string } | null {
+  const byDate = joinWeightsByDate(headers, rows, tables)
+  if (byDate) return byDate
   const role = (hs: string[], r: MetaRole) => hs.findIndex((h) => metaRole(h) === r)
   const di = role(headers, 'subject') >= 0 ? role(headers, 'subject') : role(headers, 'trial')
   if (di < 0) return null
@@ -796,6 +868,46 @@ function joinKey(
     },
     values,
     weights: weightLog && weighed ? weights : null,
+  }
+}
+
+function joinWeightsByDate(headers: string[], rows: Cell[][], tables: ParsedTable[]): { values: Cell[]; notice: string } | null {
+  const di = headers.findIndex((h) => metaRole(h) === 'subject') >= 0 ? headers.findIndex((h) => metaRole(h) === 'subject') : headers.findIndex((h) => metaRole(h) === 'trial')
+  const td = testDateIndex(headers, rows)
+  if (di < 0 || td < 0 || !tables.every((t) => weighDateIndex(t) >= 0)) return null
+  const byAnimal = new Map<string, { day: number; w: number }[]>()
+  for (const t of tables) {
+    const wi = t.headers.findIndex(isWeightName)
+    const ti = t.headers.findIndex((h) => metaRole(h) === 'subject')
+    const wd = weighDateIndex(t)
+    for (const r of t.rows) {
+      const w = toNumber(r[wi])
+      const day = parseDay(r[wd])
+      const id = norm(r[ti])
+      if (w === null || day === null || !id) continue
+      if (!byAnimal.has(id)) byAnimal.set(id, [])
+      byAnimal.get(id)!.push({ day, w })
+    }
+  }
+  if (!byAnimal.size) return null
+  let n = 0
+  const values = rows.map((r) => {
+    const day = parseDay(r[td])
+    const list = byAnimal.get(norm(r[di]))
+    if (day === null || !list) return null
+    let best: { day: number; w: number } | null = null
+    for (const e of list) {
+      const d = Math.abs(e.day - day)
+      // On a tie, the earlier weigh-in (before the test) wins.
+      if (d <= WEIGH_WINDOW_DAYS && (!best || d < Math.abs(best.day - day) || (d === Math.abs(best.day - day) && e.day < best.day))) best = e
+    }
+    if (best) n++
+    return best ? best.w : null
+  })
+  const files = [...new Set(tables.map((t) => t.file))].join(', ')
+  return {
+    values,
+    notice: `Body weight from ${files} was added to ${n} of ${rows.length} runs, using each animal's weigh-in nearest the test date (within ${WEIGH_WINDOW_DAYS} days).${n < rows.length ? ` ${rows.length - n} runs had no weigh-in that close.` : ''} Weight appears as a parameter and can be used as a covariate (Setup → Statistics).`,
   }
 }
 
