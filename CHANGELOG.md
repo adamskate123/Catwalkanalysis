@@ -3,6 +3,26 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.10.0] - 2026-10-14
+
+Tested with a real SDI PAS database (558 runs, about 1 million position events).
+
+### Added
+
+- **Tracks tab** (Open Field Lab, SDI PAS databases). The app now keeps each run's beam positions (every move to a new beam and every rearing, to 0.1 s) with the experiment, about 4 bytes per event, so tracks can be redrawn without reloading the database.
+  - **Where each group spends its time**, at the selected timepoint or age window:
+    - *Time in place*: one heatmap per group of the share of session time at each beam position. Each animal's map is averaged first, so every animal counts once. Square-root colour scale, so the walls and corners don't wash out the rest of the arena.
+    - *All tracks*: every animal's track drawn faintly, so busy routes build up (the classic overhead view).
+    - *Difference from control*: each group's map minus the control group's, in percentage points (blue = less time, red = more).
+  - **One animal's track**: pick an animal and a run. The track is coloured by 5-min interval, with rearing as dots. **Replay** it with play/pause, 1–120× speed and a time slider, with the animal's position marked as it moves.
+  - Positions are known to the nearest beam (2.5 cm), so tracks are straight steps between beams. A small fixed jitter, within the half-beam the position is uncertain by, spreads repeated passes like a video track.
+  - Runs left out under Setup → Data checks, excluded groups and filters are left out of the group maps.
+  - Every map and track exports as SVG/PNG with its title, legend, colour scale and caption. *Download every graph* includes the group maps for each timepoint.
+
+### Changed
+
+- Exported heatmaps can carry their own colour-scale labels (e.g. "% of time") instead of always "Hedges g".
+
 ## [2.9.1] - 2026-10-14
 
 Tested with a real project weight log (one row per weigh-in: Animal ID, Date of Birth, Treatment, Date Observed, Performed By, Weight (g); 177 animals, 1,311 weigh-ins) together with SDI PAS, CatWalk and rotarod data.

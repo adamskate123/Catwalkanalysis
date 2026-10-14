@@ -206,9 +206,11 @@ function standalone(svg: SVGSVGElement): SVGSVGElement {
     const x0 = (w - scale.length * cw) / 2
     const x1 = x0 + scale.length * cw
     scale.forEach((c, i) => out.appendChild(svgEl('rect', { x: x0 + i * cw, y: sy, width: cw, height: 12, fill: c })))
-    out.appendChild(svgEl('text', { x: x0, y: sy + 25, 'font-size': 10, fill: ink }, 'Lower'))
-    out.appendChild(svgEl('text', { x: (x0 + x1) / 2, y: sy + 25, 'text-anchor': 'middle', 'font-size': 10, fill: ink }, 'Hedges g'))
-    out.appendChild(svgEl('text', { x: x1, y: sy + 25, 'text-anchor': 'end', 'font-size': 10, fill: ink }, 'Higher'))
+    // Labels: left end, middle (what the colour means), right end; effect-size heatmaps by default.
+    const [lo, mid, hi] = svg.dataset.scaleLabels ? (JSON.parse(svg.dataset.scaleLabels) as string[]) : ['Lower', 'Hedges g', 'Higher']
+    out.appendChild(svgEl('text', { x: x0, y: sy + 25, 'font-size': 10, fill: ink }, lo))
+    out.appendChild(svgEl('text', { x: (x0 + x1) / 2, y: sy + 25, 'text-anchor': 'middle', 'font-size': 10, fill: ink }, mid))
+    out.appendChild(svgEl('text', { x: x1, y: sy + 25, 'text-anchor': 'end', 'font-size': 10, fill: ink }, hi))
   }
   caption.forEach((line, i) => out.appendChild(svgEl('text', { x: 10, y: top + h + scaleH + 16 + i * 14, 'font-size': 10.5, fill: muted }, line)))
   return out

@@ -7,6 +7,7 @@ import { program, roleOf } from '../programs'
 import { readPrismProject, reshapeTable, type ImportOptions } from './importers'
 import { RECORDING_COL, readPasFile } from './pas'
 import { collectChecks, type DataCheck } from './dataChecks'
+import { mergeTrackSets, type TrackSet } from './tracks'
 
 /** Sentences (instructions on a "How to use" sheet) are never parameter names. */
 const matchColumn = (name: string) => (name.length > 100 || name.split(/\s+/).length > 14 ? null : program().matchColumn(name))
@@ -20,6 +21,8 @@ export interface RawSheet {
   cells: Cell[][]
   /** Messages from the importer (e.g. sheets it skipped), shown when the file is loaded. */
   notes?: string[]
+  /** Movement tracks (SDI PAS databases), carried through to the dataset. */
+  tracks?: TrackSet
 }
 
 export interface ParsedTable {
@@ -30,6 +33,8 @@ export interface ParsedTable {
   rows: Cell[][]
   /** Title line above the header row, if any (e.g. the name of a reference table). */
   title?: string
+  /** Movement tracks (SDI PAS databases), by recording. */
+  tracks?: TrackSet
 }
 
 export interface ColumnInfo {
@@ -213,6 +218,7 @@ export function detectTable(sheet: RawSheet): ParsedTable | null {
     headerRow: bestRow,
     headers: headers.filter((_, i) => keep[i]),
     rows: rows.map((r) => r.filter((_, i) => keep[i])),
+    ...(sheet.tracks ? { tracks: sheet.tracks } : {}),
   }
 }
 
@@ -294,6 +300,8 @@ export interface Dataset {
   checks?: DataCheck[]
   /** Animals whose dates of birth differ between rows of a weights file (Setup → Data checks). */
   birthDateConflicts?: BirthDateConflict[]
+  /** Movement tracks by recording (SDI PAS databases; Tracks tab). */
+  tracks?: TrackSet
 }
 
 export const SOURCE_COL = 'Source file'
@@ -519,6 +527,7 @@ export function mergeTables(input: ParsedTable[], opts: MergeOptions = {}): Data
     reference: extra?.reference ?? null,
     checks,
     birthDateConflicts: dobConflicts,
+    tracks: mergeTrackSets(input.map((t) => t.tracks)),
   }
 }
 

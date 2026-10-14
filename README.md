@@ -1,6 +1,6 @@
 # Behavior Lab · Gait, Rotarod, Open Field, Cage Hang, Weight
 
-**Version 2.9.1**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 2.10.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
 A web app that turns rodent behavioural data into structured graphs, statistics and a written phenotype summary, with a built-in tutorial for each test. It contains five programs; switch between them by clicking the name and icon at the top left:
 
@@ -24,6 +24,10 @@ It runs in any modern browser on **phones, tablets and desktops**, and can be in
   - **Measures:** PAS's own counts (ambulatory, centre and periphery ambulatory, fine movements, rearing). Distance, mean speed, resting time, centre time (s and %) and centre entries are recalculated from the logged beam events the way PAS's data reduction does it (2.5 cm per beam, Euclidean steps rounded to 0.1 cm, a pause of ≥ 5 s is resting, a zone carried into the next interval is a new entry). On sessions PAS had reduced, distance, resting time and centre entries match PAS exactly and centre time to 0.1 s.
   - **Totals and intervals:** each measure comes as a session total and per interval; the Habituation tab and the first/last/% change summaries use the per-interval values.
   - **Genotype and sex:** from the animal key (e.g. a weights workbook, joined by tag + toe/ear mark). Animals not in the key take their most common PAS chamber label ("AA F" → AA, female), translated into the key's genotype names where the key shows what a PAS code means.
+- **Tracks** (Open Field Lab, SDI PAS databases): the animal's path is redrawn from the beam events kept with the experiment.
+  - **Group maps**, per timepoint or age window: time-in-place heatmaps (each animal counts once; square-root colour scale), all tracks overlaid, and each group's difference from the control group.
+  - **One animal's track**, coloured by 5-min interval with rearing as dots, and a **replay** (play/pause, 1–120× speed, time slider).
+  - Positions are on the 2.5 cm beam grid, so tracks are steps between beams, with a small fixed jitter so repeated passes spread out. Maps and tracks export as SVG/PNG.
 - **Data checks** (Setup → Data checks): runs that look inconsistent are listed with an *Exclude* box each, and buttons to exclude or keep a whole group:
   - runs that stopped early (excluded by default);
   - an animal tested twice on one day (the most complete, latest run is used; when both are complete the ID may have been mistyped);
