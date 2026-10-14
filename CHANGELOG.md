@@ -3,6 +3,16 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.10.1] - 2026-10-14
+
+### Added
+
+- **Mouse marker in track replays.** During a replay, the animal's position is shown as a mouse seen from above (drawn from a sketch by the lab). The mouse turns to face its direction of travel, taken from its last few beam positions so it doesn't twitch at every beam step. A *Replay marker: Mouse / Circle* choice switches back to the plain circle.
+
+### Fixed
+
+- Rearing dots on a track have their own colour; they shared one with the 15–20 min interval.
+
 ## [2.10.0] - 2026-10-14
 
 Tested with a real SDI PAS database (558 runs, about 1 million position events).

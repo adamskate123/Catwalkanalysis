@@ -5,6 +5,7 @@ import { groupOccupancy, occupancy, unpackEvents, type TrackEvents, type TrackRu
 import { trackRuns, type TrackRunInfo } from '../../lib/trackRuns'
 import { seriesColor, type ChartTheme } from '../../lib/theme'
 import { Legend, Tooltip, type TipState } from '../charts/common'
+import { MouseIcon } from '../charts/MouseIcon'
 import { useWidth } from '../charts/useWidth'
 import { ChartCard } from './figures'
 import type { TabProps } from './types'
@@ -366,6 +367,26 @@ function GroupMaps({
   )
 }
 
+/**
+ * Direction of travel at event `i` (degrees, as Math.atan2(dy, dx)): from the
+ * position a few beams back, so the mouse doesn't twitch with each beam step.
+ * Facing down (90°) before the first move.
+ */
+function headingAt(ev: TrackEvents, i: number, g: ArenaGeom): number {
+  const at = (k: number) => [g.px(ev.x[k]) + jitter(k, 1) * g.cell, g.px(ev.y[k]) + jitter(k, 2) * g.cell]
+  const [x, y] = at(i)
+  let seen = 0
+  let from = -1
+  for (let k = i - 1; k >= 0 && seen < 3; k--) {
+    if (ev.rear[k] || (ev.x[k] === ev.x[i] && ev.y[k] === ev.y[i])) continue
+    from = k
+    seen++
+  }
+  if (from < 0) return 90
+  const [fx, fy] = at(from)
+  return (Math.atan2(y - fy, x - fx) * 180) / Math.PI
+}
+
 // ---------------------------------------------------------------------------
 // One animal: track and replay
 
@@ -408,6 +429,7 @@ function OneAnimal({
   const [speed, setSpeed] = useState(30)
   const [byInterval, setByInterval] = useState(true)
   const [showRear, setShowRear] = useState(true)
+  const [marker, setMarker] = useState<'mouse' | 'circle'>('mouse')
   const ref = useRef<SVGSVGElement>(null)
   const [box, width] = useWidth<HTMLDivElement>(480)
 
@@ -437,6 +459,8 @@ function OneAnimal({
   const intervalTenths = tr.intervalSecs * 10
   const segs = trackSegments(ev, g, byInterval ? intervalTenths : 1e9, pos)
   const nIntervals = Math.max(1, Math.round(tr.secs / tr.intervalSecs))
+  // Rearing takes a colour no interval uses (intervals take the first four).
+  const rearColor = theme.series[6]
   const intervalColor = (k: number) => (byInterval ? seriesColor(theme, Math.min(k, theme.series.length - 1)) : theme.text)
   let cur = -1
   for (let i = 0; i < ev.t.length && ev.t[i] <= pos; i++) if (!ev.rear[i]) cur = i
@@ -445,7 +469,7 @@ function OneAnimal({
     ...(byInterval
       ? Array.from({ length: nIntervals }, (_, k) => ({ label: `${(k * tr.intervalSecs) / 60}–${((k + 1) * tr.intervalSecs) / 60} min`, color: intervalColor(k) }))
       : [{ label: 'Track', color: theme.text }]),
-    ...(showRear ? [{ label: 'Rearing', color: theme.series[3] }] : []),
+    ...(showRear ? [{ label: 'Rearing', color: rearColor }] : []),
   ]
   const label = `${run.subject} · ${run.group} · ${run.date}${run.time && run.time !== run.date ? ` (${run.time})` : ''}`
 
@@ -492,6 +516,15 @@ function OneAnimal({
           <input type="checkbox" checked={showRear} onChange={(e) => setShowRear(e.target.checked)} />
           <span>Show rearing</span>
         </label>
+        <span className="row" role="radiogroup" aria-label="Replay marker" style={{ gap: 12 }}>
+          <span className="small muted">Replay marker:</span>
+          {(['mouse', 'circle'] as const).map((m) => (
+            <label key={m} className="check">
+              <input type="radio" name="track-marker" checked={marker === m} onChange={() => setMarker(m)} />
+              <span>{m === 'mouse' ? 'Mouse' : 'Circle'}</span>
+            </label>
+          ))}
+        </span>
       </div>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
         <button
@@ -550,11 +583,21 @@ function OneAnimal({
           <polyline key={k} points={s.pts.join(' ')} fill="none" stroke={intervalColor(s.interval)} strokeWidth={1} strokeLinejoin="round" strokeOpacity={0.85} />
         ))}
         {rears.map((i) => (
-          <circle key={i} cx={g.px(ev.x[i]) + jitter(i, 3) * g.cell} cy={g.px(ev.y[i]) + jitter(i, 4) * g.cell} r={2.2} fill={theme.series[3]} />
+          <circle key={i} cx={g.px(ev.x[i]) + jitter(i, 3) * g.cell} cy={g.px(ev.y[i]) + jitter(i, 4) * g.cell} r={2.2} fill={rearColor} />
         ))}
         <ArenaFrame g={g} set={set} theme={theme} />
-        {cur >= 0 && pos < end && (
+        {cur >= 0 && pos < end && marker === 'circle' && (
           <circle cx={g.px(ev.x[cur]) + jitter(cur, 1) * g.cell} cy={g.px(ev.y[cur]) + jitter(cur, 2) * g.cell} r={Math.max(5, g.cell * 0.45)} fill={theme.text} stroke={theme.surface} strokeWidth={2} />
+        )}
+        {cur >= 0 && pos < end && marker === 'mouse' && (
+          <MouseIcon
+            x={g.px(ev.x[cur]) + jitter(cur, 1) * g.cell}
+            y={g.px(ev.y[cur]) + jitter(cur, 2) * g.cell}
+            heading={headingAt(ev, cur, g)}
+            length={Math.max(24, g.cell * 2.6)}
+            ink={theme.text}
+            fill={theme.surface}
+          />
         )}
       </svg>
     </div>
