@@ -595,8 +595,7 @@ function OneAnimal({
             y={g.px(ev.y[cur]) + jitter(cur, 2) * g.cell}
             heading={headingAt(ev, cur, g)}
             length={Math.max(24, g.cell * 2.6)}
-            ink={theme.text}
-            fill={theme.surface}
+            ink={theme.text2}
           />
         )}
       </svg>

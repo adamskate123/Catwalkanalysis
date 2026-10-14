@@ -3,6 +3,12 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.10.2] - 2026-10-14
+
+### Changed
+
+- **A better-looking mouse in track replays.** The marker is redrawn as a grey mouse seen from above: teardrop body, big round ears with pink insides, pointed pink nose, little pink feet, whiskers and a long thin tail. It reads as a mouse at any size and on light or dark charts; it still turns to face its direction of travel.
+
 ## [2.10.1] - 2026-10-14
 
 ### Added
