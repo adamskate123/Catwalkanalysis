@@ -7,7 +7,7 @@
 //    repeated-measures two-way ANOVA / mixed-effects analysis can be run directly.
 
 import type { AggregateResult, AnalysisConfig, Measure, MeasureResult, TimeResults } from './analysis'
-import { naturalCompare, trialAxis, trialValue } from './analysis'
+import { naturalCompare, trialAxis, trialMeasures, trialValue } from './analysis'
 import { program } from '../programs'
 
 export interface PrismOptions {
@@ -107,8 +107,9 @@ export function buildPrismTables(agg: AggregateResult, opt: PrismOptions): PzfxT
     // Learning curves: rows = (timepoint ·) trial, replicate subcolumns = animals.
     const noun = opt.runNoun
     const axis = trialAxis(agg, noun[0].toUpperCase() + noun.slice(1))
+    const curves = new Set(trialMeasures(opt.measures, agg))
     for (const m of opt.measures) {
-      if (m.col === undefined) continue
+      if (!curves.has(m)) continue
       const columns = agg.groups.map((g) => {
         const ids = [...new Set(agg.trials.filter((r) => r.group === g).map((r) => r.id))].sort(naturalCompare)
         return {

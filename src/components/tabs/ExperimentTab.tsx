@@ -23,6 +23,7 @@ export function ExperimentTab({ experiment, ds, onUpdate, onAddFiles, onDelete }
   const [session, setSession] = useState('')
   const [messages, setMessages] = useState<{ text: string; level: 'info' | 'warning' }[]>([])
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('')
   const input = useRef<HTMLInputElement>(null)
   const sessions = [...new Set(experiment.files.map((f) => f.session).filter((s): s is string => Boolean(s)))]
   const usesSessions = sessions.length > 0
@@ -30,10 +31,11 @@ export function ExperimentTab({ experiment, ds, onUpdate, onAddFiles, onDelete }
   const pick = async (list: FileList | null) => {
     if (!list?.length) return
     setBusy(true)
-    const { files, messages } = await readSpreadsheets(Array.from(list))
+    const { files, messages } = await readSpreadsheets(Array.from(list), setProgress)
     setPending((p) => [...p, ...files])
     setMessages(messages)
     setBusy(false)
+    setProgress('')
   }
 
   const add = () => {
@@ -56,9 +58,9 @@ export function ExperimentTab({ experiment, ds, onUpdate, onAddFiles, onDelete }
         </p>
         <ImportOptionsField />
         <div className="row">
-          <input ref={input} type="file" multiple hidden accept=".xlsx,.xlsm,.csv,.txt,.tsv,.prism" onChange={(e) => (pick(e.target.files), (e.target.value = ''))} />
+          <input ref={input} type="file" multiple hidden accept={`.xlsx,.xlsm,.csv,.txt,.tsv,.prism${program().id === 'openfield' ? ',.mdb,.accdb' : ''}`} onChange={(e) => (pick(e.target.files), (e.target.value = ''))} />
           <button className="btn" onClick={() => input.current?.click()} disabled={busy}>
-            {busy ? 'Reading…' : 'Choose files'}
+            {busy ? progress || 'Reading…' : 'Choose files'}
           </button>
         </div>
         {pending.length > 0 && (

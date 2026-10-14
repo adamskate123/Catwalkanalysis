@@ -2,11 +2,19 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { fileURLToPath } from 'node:url'
 import pkg from './package.json' with { type: 'json' }
 
 // Relative base so the build works from any sub-path (e.g. GitHub Pages).
 export default defineConfig({
   base: './',
+  resolve: {
+    // mdb-reader (SDI PAS databases) uses these only for password-protected files; the stand-ins keep Node streams out of the bundle.
+    alias: {
+      'browserify-aes/browser.js': fileURLToPath(new URL('./src/lib/stubs/mdbCrypto.ts', import.meta.url)),
+      'create-hash': fileURLToPath(new URL('./src/lib/stubs/mdbHash.ts', import.meta.url)),
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },

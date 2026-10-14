@@ -10,14 +10,17 @@ export interface LoadedFile {
 
 export const isBackupFile = (f: File) => /\.gaitlab(\.json)?$|\.json$/i.test(f.name)
 
-/** Reads spreadsheets and Prism files into tables; returns human-readable messages for anything notable. */
-export async function readSpreadsheets(list: File[]): Promise<{ files: LoadedFile[]; messages: { text: string; level: 'info' | 'warning' }[] }> {
+/** Reads spreadsheets, Prism files and PAS databases into tables; returns human-readable messages for anything notable. */
+export async function readSpreadsheets(
+  list: File[],
+  onProgress?: (text: string) => void,
+): Promise<{ files: LoadedFile[]; messages: { text: string; level: 'info' | 'warning' }[] }> {
   const files: LoadedFile[] = []
   const messages: { text: string; level: 'info' | 'warning' }[] = []
   const opts = getImportOptions()
   for (const f of list) {
     try {
-      const sheets = await readFile(f, opts)
+      const sheets = await readFile(f, opts, (share) => onProgress?.(`Reading ${f.name}: ${Math.round(share * 100)}%`))
       for (const s of sheets) for (const text of s.notes ?? []) messages.push({ level: 'info', text })
       const tables = pickTables(sheets, opts)
       if (!tables.length || !tables.some((t) => t.rows.length)) throw new Error(`${f.name}: no data rows found.`)

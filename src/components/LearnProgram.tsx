@@ -114,6 +114,14 @@ const CONTENT: Record<Exclude<ProgramId, 'catwalk'>, Content> = {
           <Cite refs={OPENFIELD_REFS} ids={['bolivar2009']} /> Open Field Lab reads values per interval (e.g. four 5-minute bins) and reports each animal's first
           and last interval and the % change between them; the Habituation tab plots the curves.
         </p>
+        <p>
+          <b>Photobeam arenas.</b> Systems such as the SDI Photobeam Activity System (PAS) track the animal with grids of infrared beams instead of a camera.
+          Breaks of successive beams count as <b>ambulatory</b> movement and repeated breaks of one beam as <b>fine</b> movement (grooming, sniffing, head
+          movements); an upper row of beams counts <b>rearing</b>. Open Field Lab reads the PAS database (.mdb) directly: it uses PAS's own counts and
+          recalculates distance, speed, resting time and centre measures from the logged beam events the way PAS's data reduction does (2.5 cm per beam, a
+          pause of 5 s or more counted as resting). Runs that look wrong, such as a run that stopped early, an animal tested twice on one day, or a chamber
+          label that disagrees with the animal key, are listed under Setup → Data checks, where you choose which to leave out.
+        </p>
       </>
     ),
     protocol: (
@@ -127,6 +135,10 @@ const CONTENT: Record<Exclude<ProgramId, 'catwalk'>, Content> = {
         <li>
           Export EthoVision's trial statistics with independent variables (genotype, sex, age). To look at habituation within a session, export results per time
           bin (e.g. 5 min); Open Field Lab treats bins as timepoints.
+        </li>
+        <li>
+          With SDI PAS, load the database file itself together with an animal key (ID, genotype, sex, date of birth); the key's genotypes are more reliable than
+          labels typed into PAS at each session, which fill in only for animals the key doesn't list.
         </li>
       </ul>
     ),
@@ -399,7 +411,9 @@ export function LearnProgram({ id, onAnalyze }: { id: Exclude<ProgramId, 'catwal
             <a href="#sources">All references and sources the app is built on (statistics, file formats, other programs) →</a>
           </p>
           <p className="small muted">
-            {prog.instrument} is a trademark of its manufacturer; this app is an independent tool and is not affiliated with it.
+            {/ or /.test(prog.instrument)
+              ? `${prog.instrument.replace(' or ', ' and ')} are trademarks of their manufacturers; this app is an independent tool and is not affiliated with them.`
+              : `${prog.instrument} is a trademark of its manufacturer; this app is an independent tool and is not affiliated with it.`}
           </p>
         </section>
       </div>

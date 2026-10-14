@@ -1,6 +1,8 @@
 import { PAWS, otherParam, type Paw, type ParamDef, type StatKind } from './catalog'
 import { paramById, program, type TrialDerived } from '../programs'
 import { SOURCE_COL, toNumber, type Cell, type Dataset } from './parse'
+import { RECORDING_COL } from './pas'
+import { excludedRecordings } from './dataChecks'
 import {
   benjaminiHochberg,
   describe,
@@ -120,8 +122,17 @@ export function buildMeasures(ds: Dataset): Measure[] {
     // First, last and % change for every parameter measured across ordered intervals (habituation).
     if (program().trialSummaries) {
       const noun = (program().trialColumn ?? 'Trial').toLowerCase()
-      // Body weight is joined onto every row; it is not a within-session measure.
-      for (const src of measures.filter((m) => m.col !== undefined && !m.trial && m.def.id !== 'body_weight' && ds.rows.some((r) => r[triali] !== null && r[m.col!] !== null))) {
+      // Body weight is joined onto every row; it is not a within-session measure. When the data
+      // hold per-interval values next to session totals (PAS), only the per-interval ones change.
+      const perInterval = measures.some((m) => m.variant === 'per interval')
+      for (const src of measures.filter(
+        (m) =>
+          m.col !== undefined &&
+          !m.trial &&
+          m.def.id !== 'body_weight' &&
+          (!perInterval || m.variant === 'per interval') &&
+          ds.rows.some((r) => r[triali] !== null && r[m.col!] !== null),
+      )) {
         const base = src.def
         const name = src.label.replace(/ per (interval|trial|bin)$/i, '')
         for (const [how, suffix, label, unit, description] of [
@@ -196,6 +207,8 @@ export interface AnalysisConfig {
   maxVariation: number | null
   /** Keep only rows whose value in `col` is one of `values`. */
   filters: { col: string; values: string[] }[]
+  /** Setup → Data checks: flagged runs (by recording) the user excluded (true) or kept (false); others follow their default. */
+  runExclusions?: Record<string, boolean>
   /** Groups analysed together: original group name → combined group name. */
   groupMerge?: Record<string, string>
 }
@@ -447,6 +460,8 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
   const runi = triali >= 0 ? triali : ds.columns.findIndex((c) => c.meta === 'run')
   const filters = cfg.filters.map((f) => ({ i: colIndex(ds, f.col), values: new Set(f.values) })).filter((f) => f.i >= 0)
   const raw = measures.filter((m) => m.col !== undefined)
+  const reci = ds.headers.indexOf(RECORDING_COL)
+  const excludedRuns = excludedRecordings(ds.checks, cfg.runExclusions)
 
   interface Row {
     subject: string
@@ -484,6 +499,10 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
       return
     }
     if (filters.some((f) => !f.values.has(cellText(r[f.i])))) {
+      filtered++
+      return
+    }
+    if (reci >= 0 && excludedRuns.size && excludedRuns.has(cellText(r[reci]))) {
       filtered++
       return
     }
@@ -615,6 +634,17 @@ export function aggregate(ds: Dataset, measures: Measure[], cfg: AnalysisConfig)
             .map((r) => ({ id: r.subject, group: r.group, time: r.time, trial: r.trial, order: r.order, values: Object.fromEntries(raw.map((m, j) => [m.key, r.v[j]])) }))
         : [],
   }
+}
+
+/**
+ * Measures drawn per trial or interval. When the data hold per-interval values next to
+ * session totals repeated on every interval row (PAS), only the per-interval ones.
+ */
+export function trialMeasures(measures: Measure[], agg: AggregateResult): Measure[] {
+  const perInterval = measures.some((m) => m.variant === 'per interval')
+  return measures.filter(
+    (m) => m.col !== undefined && m.def.id !== 'body_weight' && (!perInterval || m.variant === 'per interval') && agg.trials.some((t) => Number.isFinite(t.values[m.key])),
+  )
 }
 
 /** Every (timepoint, trial) pair present, in order; labels read "Day 1 · 2" when there are several timepoints. */

@@ -88,6 +88,7 @@ export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImp
   const [files, setFiles] = useState<LoadedFile[]>([])
   const [errors, setErrors] = useState<{ text: string; level: 'info' | 'warning' }[]>([])
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('')
   const [over, setOver] = useState(false)
   const input = useRef<HTMLInputElement>(null)
 
@@ -102,10 +103,11 @@ export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImp
         msgs.push({ level: 'warning', text: e instanceof Error ? e.message : `${b.name}: could not be imported.` })
       }
     }
-    const { files: added, messages } = await readSpreadsheets(all.filter((f) => !isBackupFile(f)))
+    const { files: added, messages } = await readSpreadsheets(all.filter((f) => !isBackupFile(f)), setProgress)
     setFiles((prev) => [...prev, ...added])
     setErrors([...msgs, ...messages])
     setBusy(false)
+    setProgress('')
   }
 
   const analyse = () => onLoaded(files)
@@ -203,15 +205,16 @@ export function Loader({ onLoaded, onLearn, experiments, onOpen, onDelete, onImp
             ref={input}
             type="file"
             multiple
-            accept=".xlsx,.xlsm,.csv,.txt,.tsv,.prism,.json,.gaitlab,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain"
+            accept={`.xlsx,.xlsm,.csv,.txt,.tsv,.prism,.json,.gaitlab${prog.id === 'openfield' ? ',.mdb,.accdb' : ''},application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain`}
             onChange={(e) => {
               if (e.target.files?.length) addFiles(e.target.files)
               e.target.value = ''
             }}
           />
-          <p style={{ fontWeight: 600, marginBottom: 4 }}>{busy ? 'Reading…' : 'Drop files here or tap to choose'}</p>
+          <p style={{ fontWeight: 600, marginBottom: 4 }}>{busy ? progress || 'Reading…' : 'Drop files here or tap to choose'}</p>
           <p className="muted small" style={{ margin: 0 }}>
-            {prog.instrument} exports, Excel (.xlsx), text (.csv, .txt, .tsv) or Prism 10 (.prism). Spreadsheets can hold one row per{' '}
+            {prog.instrument} exports, Excel (.xlsx), text (.csv, .txt, .tsv) or Prism 10 (.prism)
+            {prog.id === 'openfield' ? ', or the SDI PAS database itself (.mdb)' : ''}. Spreadsheets can hold one row per{' '}
             {prog.runNoun}, one column per {prog.runNoun} or group (Prism style), or a measure/value list. Add several files to combine cohorts or
             timepoints, or drop a backup (.gaitlab.json) to restore a saved experiment.
           </p>

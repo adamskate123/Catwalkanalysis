@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { trialAxis, trialValue } from '../../lib/analysis'
+import { trialAxis, trialMeasures, trialValue } from '../../lib/analysis'
 import { finite, mean, sem } from '../../lib/stats'
 import { program } from '../../programs'
 import { LineChart, type LineSeries } from '../charts/LineChart'
@@ -10,7 +10,7 @@ import type { TabProps } from './types'
 export function TrialsTab(props: TabProps & { pick?: string }) {
   const { agg, measures, theme, colorOf } = props
   const prog = program()
-  const perTrial = measures.filter((m) => m.col !== undefined && m.def.id !== 'body_weight' && agg.trials.some((t) => Number.isFinite(t.values[m.key])))
+  const perTrial = trialMeasures(measures, agg)
   const [key, setKey] = useState(perTrial[0]?.key ?? '')
   const ref = useRef<SVGSVGElement>(null)
   const m = perTrial.find((x) => x.key === (props.pick ?? key)) ?? perTrial[0]
@@ -36,7 +36,7 @@ export function TrialsTab(props: TabProps & { pick?: string }) {
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0 }}>{prog.trialsTab?.title ?? 'Trials'}</h2>
           {perTrial.length > 1 && (
-            <select value={m.key} onChange={(e) => setKey(e.target.value)} style={{ width: 'auto' }} aria-label="Parameter">
+            <select value={m.key} onChange={(e) => setKey(e.target.value)} style={{ width: 'auto', maxWidth: '100%' }} aria-label="Parameter">
               {perTrial.map((x) => (
                 <option key={x.key} value={x.key}>
                   {x.label}

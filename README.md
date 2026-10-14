@@ -1,6 +1,6 @@
 # Behavior Lab · Gait, Rotarod, Open Field, Cage Hang, Weight
 
-**Version 2.8.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
+**Version 2.9.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes; the app also shows them under *What's new* in the footer.
 
 A web app that turns rodent behavioural data into structured graphs, statistics and a written phenotype summary, with a built-in tutorial for each test. It contains five programs; switch between them by clicking the name and icon at the top left:
 
@@ -8,7 +8,7 @@ A web app that turns rodent behavioural data into structured graphs, statistics 
 | --- | --- | --- |
 | **Gait Lab** | CatWalk XT gait analysis | CatWalk XT run/trial statistics |
 | **Rotarod Lab** | Rotarod motor coordination and learning | SDI Rotor-Rod exports; Excel/CSV; Prism 10 `.prism` |
-| **Open Field Lab** | Open field activity and anxiety-like behaviour | EthoVision XT statistics exports; Excel/CSV; Prism 10 `.prism` |
+| **Open Field Lab** | Open field activity and anxiety-like behaviour | EthoVision XT statistics exports; SDI Photobeam Activity System databases (`.mdb`); Excel/CSV; Prism 10 `.prism` |
 | **Cage Hang Lab** | Inverted cage-lid / grid hang (limb strength and endurance) | Excel/CSV; Prism 10 `.prism` |
 | **Weight Lab** | Body weight over time vs controls and a reference strain | Colony weight logs (Excel/CSV): one column per weigh-in date or one row per weigh-in |
 
@@ -19,6 +19,18 @@ It runs in any modern browser on **phones, tablets and desktops**, and can be in
 - **Gait Lab: dragging.** Print elongation (length ÷ width) for each paw and hind ÷ front ratios of print length, area, contact area, intensity and elongation are calculated. Body contacts labelled in CatWalk XT (abdomen, tail, genitalia, nose, hips, knees; % of run) are read as parameters. A *Hind-paw dragging / poor hind-limb clearance* pattern combines these with hind swing speed, stance, stride and the regularity index. It is shown only when elongation or body contact changed, because the other markers are shared with any hind-limb deficit.
 - **Rotarod Lab** recognises latency to fall, rod speed at fall, distance and passive rotations. It averages trials per animal and day, and computes best, first and last trial and the first-to-last improvement for each animal. A **Learning curves** tab plots every trial of every day. Prism export adds "by trial" grouped tables for repeated-measures analysis. It flags impaired coordination and balance, reduced motor learning, and gripping instead of walking.
 - **Open Field Lab** recognises distance, velocity, time moving and immobile, centre time, entries and latency, periphery time, rearing, grooming, stereotypy and fecal boli, including EthoVision's long column names (`In zone Center / Center-point Cumulative Duration s`). Within-session intervals (EthoVision time bins, or Prism sheets such as "Distance vs interval ≤50 days" with groups "… interval 1", "… interval 2") are read as intervals: a **Habituation** tab plots each group across the session, and the first interval, last interval and % change first → last are tested per animal. It flags hypo- and hyperactivity, anxiety-like centre avoidance, reduced centre avoidance and repetitive behaviour.
+- **SDI PAS databases** (Open Field Lab): load the Photobeam Activity System database (e.g. `PASdata_001.mdb`) as it is; it is read in the browser (a 230 MB database takes about 10 s).
+  - **Rows:** one per animal × run × 5-min interval, with the run date as the timepoint.
+  - **Measures:** PAS's own counts (ambulatory, centre and periphery ambulatory, fine movements, rearing). Distance, mean speed, resting time, centre time (s and %) and centre entries are recalculated from the logged beam events the way PAS's data reduction does it (2.5 cm per beam, Euclidean steps rounded to 0.1 cm, a pause of ≥ 5 s is resting, a zone carried into the next interval is a new entry). On sessions PAS had reduced, distance, resting time and centre entries match PAS exactly and centre time to 0.1 s.
+  - **Totals and intervals:** each measure comes as a session total and per interval; the Habituation tab and the first/last/% change summaries use the per-interval values.
+  - **Genotype and sex:** from the animal key (e.g. a weights workbook, joined by tag + toe/ear mark). Animals not in the key take their most common PAS chamber label ("AA F" → AA, female), translated into the key's genotype names where the key shows what a PAS code means.
+- **Data checks** (Setup → Data checks): runs that look inconsistent are listed with an *Exclude* box each, and buttons to exclude or keep a whole group:
+  - runs that stopped early (excluded by default);
+  - an animal tested twice on one day (the most complete, latest run is used; when both are complete the ID may have been mistyped);
+  - PAS labels that disagree between an animal's runs or with the animal key;
+  - runs without a beam-event log.
+
+  Excluded runs are left out of every analysis but stay in the data; the choice is saved with the experiment.
 - **Cage Hang Lab** recognises hang time (latency to fall), best, first and last trial, the change from first to last trial, number of falls and body weight. It computes **holding impulse** (body weight × hang time, g·s; Deacon 2013) when weights are present; holding impulse is not further adjusted for weight. A **Trials** tab plots every trial, and a warning appears when many values sit at the cut-off. It flags reduced grip strength and endurance, and fatigue across trials.
 - **Age windows** (Setup → Age windows): each animal's age on the test day is calculated from its date of birth and the test date. Dates come from an animal key (date-of-birth and test-date columns), a date in the timepoint column, dates entered or pasted in Setup, or a date in the experiment name. Runs are then grouped into windows you set: consecutive bins (≤50, 51-100, … days, named like age-binned Prism sheets) or target ages ± days. The windows become a timepoint, and a switch above the results moves between them and the data files' own timepoints, so both can be analysed.
 - **Weight Lab** reads a colony weight log (one row per animal with sex, genotype and date of birth, and one column per weigh-in date). It works out each animal's age at every weigh-in and uses weeks of age as timepoints. When short IDs repeat across litters it identifies animals by tag + toe/ear mark. Groups are compared with the control group week by week, as in the other programs. Every weigh-in is also compared with a reference strain of the same sex and week of age: by default C57BL/6J from The Jackson Laboratory (weeks 3–24), or a reference sheet in the workbook (age in weeks, female/male mean and SD). The **Reference strain** tab shows:
@@ -104,7 +116,7 @@ npm run lint
 npm run build      # production build in dist/
 ```
 
-Stack: React + TypeScript + Vite, `read-excel-file` and `papaparse` for parsing, `fflate` for Prism 10 files, hand-written SVG charts and statistics (no server).
+Stack: React + TypeScript + Vite, `read-excel-file` and `papaparse` for parsing, `fflate` for Prism 10 files, `mdb-reader` (loaded only when needed) for SDI PAS Access databases, hand-written SVG charts and statistics (no server).
 
 ## Versioning
 
