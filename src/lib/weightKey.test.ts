@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { setProgram } from '../programs'
 import { autoConfig } from './analysis'
-import { AGE_AT_TEST_COL, WEIGHT_COL, isWeightTable, mergeTables, pickTables, weightKeyTable, type Cell, type RawSheet } from './parse'
+import { AGE_AT_TEST_COL, WEIGHT_COL, birthDateConflicts, isWeightTable, mergeTables, pickTables, weightKeyTable, type Cell, type RawSheet } from './parse'
 import { LABEL_SOURCE_COL, PAS_HEADERS, RECORDING_COL } from './pas'
 
 afterEach(() => setProgram('catwalk'))
@@ -87,7 +87,11 @@ describe('weights file as an animal key', () => {
     log.cells.push(['KX7.1 LF', 'M', 'WT', '2025-06-01', '2026-03-01', 30])
     const k = weightKeyTable(pickTables([log])[0], [])!
     const row = k.rows.find((r) => r[0] === 'KX7.1 LF')!
-    expect(row.slice(1)).toEqual([null, null, null])
+    // Sex and genotype disagree, so they are left blank; the date of birth on most rows is used.
+    expect(row.slice(1)).toEqual([null, null, '2026-01-05'])
+    expect(birthDateConflicts(pickTables([log])[0])).toEqual([
+      { file: 'weights.xlsx › Log', id: 'KX7.1 LF', used: '2026-01-05', dates: [{ date: '2026-01-05', rows: 3 }, { date: '2025-06-01', rows: 1 }] },
+    ])
     expect(k.rows.find((r) => r[0] === 'KX7.2 LF')!.slice(1)).toEqual(['M', 'Mut/Mut', '2026-01-12'])
   })
 
@@ -138,5 +142,113 @@ describe('weights file as an animal key', () => {
     expect(dob('KX7.9 LF')).toBe('2025-12-01')
     expect(dob('KX7.2 LF')).toBe('2026-01-12')
     expect(Object.keys(ds.ageInfo!.fileBirthDates).sort()).toEqual(['KX7.1 LF', 'KX7.1 RF', 'KX7.2 LF', 'KX7.2 RF', 'KX7.9 LF', 'KX7.9 RF'])
+  })
+
+  it('reads a project weight log (ID, date of birth, treatment, date observed, weight) with PAS runs', () => {
+    setProgram('openfield')
+    // The layout of a shared weight log: no genotype or sex, one treatment throughout, typos in IDs and dates.
+    const rows: Cell[][] = []
+    const animals: [string, string][] = [
+      ['KX7.1 LF', '2026-01-05'],
+      ['KX7.1 RF', '2026-01-05'],
+      ['KX7.2 LF', '2026-01-12'],
+      ['KX7.2  RF', '2026-01-12'], // two spaces
+    ]
+    for (const [id, dob] of animals)
+      for (const [date, w] of [
+        ['2026-03-01', 19],
+        ['2026-04-05', 21],
+      ] as const)
+        rows.push([id, dob, 'Untreated', date, 'XYZ', w])
+    rows.push(['KX7.1 LF', '2027-01-05', 'Untreated', '2026-04-20', 'XYZ', 22]) // wrong year in one row
+    const log: RawSheet = {
+      file: 'project_weights.xlsx',
+      sheet: 'Weights',
+      cells: [['Animal ID', 'Date of Birth', 'Treatment', 'Date Observed', 'Performed By', 'Weight (g)'], ...rows],
+    }
+    // A second key that calls the date of birth "DOB" fills the same column.
+    const key: RawSheet = {
+      file: 'key.xlsx',
+      sheet: '',
+      cells: [
+        ['Animal', 'DOB'],
+        ['KX7.9 LF', '2025-12-01'],
+        ['KX7.1 RF', '2026-01-05'],
+      ],
+    }
+    const pas = pasRuns()
+    const extra = pas.cells.slice(1, 3).map((r) => {
+      const c = [...r]
+      c[PAS_HEADERS.indexOf('Animal ID')] = 'KX7.9 LF'
+      c[PAS_HEADERS.indexOf(RECORDING_COL)] = 'X1 · chamber 1'
+      return c
+    })
+    pas.cells.push(...extra)
+    const ds = load([pas, log, key])
+    const h = (n: string) => ds.headers.indexOf(n)
+    expect(ds.headers).not.toContain('Treatment')
+    expect(ds.headers).not.toContain('Performed By')
+    expect(ds.headers.filter((x) => /birth|^dob/i.test(x))).toHaveLength(1)
+    const cfg = autoConfig(ds)
+    expect(cfg.groupCol).toBe('Genotype')
+    expect(cfg.groupOrder.sort()).toEqual(['AA', 'WT'])
+    const row = (id: string, date: string) => ds.rows.find((r) => r[h('Animal ID')] === id && r[h('Test date')] === date)!
+    // "KX7.2 RF" in the data matches "KX7.2  RF" in the log
+    expect(row('KX7.2 RF', '2026-03-02')[h(AGE_AT_TEST_COL)]).toBe(49)
+    expect(row('KX7.2 RF', '2026-03-02')[h(WEIGHT_COL)]).toBe(19)
+    // The date on most rows wins over the typo
+    expect(row('KX7.1 LF', '2026-04-06')[h(AGE_AT_TEST_COL)]).toBe(91)
+    expect(row('KX7.9 LF', '2026-03-02')[h(AGE_AT_TEST_COL)]).toBe(91)
+    expect(ds.birthDateConflicts?.map((c) => c.id)).toEqual(['KX7.1 LF'])
+    expect(ds.ageInfo?.aged).toBe(ds.rows.length)
+  })
+
+  it('uses an Animals sheet in the weights workbook as the key, in Weight Lab and with PAS runs', () => {
+    const weights: Cell[][] = [['Animal ID', 'Date of Birth', 'Treatment', 'Date Observed', 'Performed By', 'Weight (g)']]
+    const animals: [string, string, string, string][] = [
+      ['KX7.1 LF', 'F', 'Mut/Mut', '2026-01-05'],
+      ['KX7.1 RF', 'F', 'WT', '2026-01-05'],
+      ['KX7.2 LF', 'M', 'Mut/Mut', '2026-01-12'],
+      ['KX7.2 RF', 'M', 'WT', '2026-01-12'],
+    ]
+    for (const [id, , g, dob] of animals)
+      for (const [date, w] of [
+        ['2026-03-01', 18],
+        ['2026-03-08', 19],
+        ['2026-04-05', 21],
+      ] as const)
+        weights.push([id, dob, 'Untreated', date, 'XYZ', w + (g === 'WT' ? 2 : 0)])
+    // A typo in one row's date of birth (it would make this weigh-in week 0)
+    weights.push(['KX7.1 LF', '2026-03-14', 'Untreated', '2026-03-15', 'XYZ', 20])
+    const sheets = (): RawSheet[] => [
+      { file: 'project_weights.xlsx', sheet: 'Weights', cells: weights },
+      { file: 'project_weights.xlsx', sheet: 'Animals', cells: [['Animal ID', 'Sex', 'Genotype'], ...animals.map(([id, sex, g]) => [id, sex, g])] },
+      { file: 'project_weights.xlsx', sheet: 'Notes', cells: [['Log a weigh-in', 'Type the date in the next row and the weight in grams.']] },
+    ]
+
+    // Weight Lab: every weigh-in kept, ages from date of birth, groups and sex from the Animals sheet
+    setProgram('weight')
+    const tables = pickTables(sheets())
+    expect(tables.map((t) => t.sheet)).toEqual(['Weights', 'Animals'])
+    const wl = mergeTables(tables)
+    const cfg = autoConfig(wl)
+    expect(wl.rows).toHaveLength(13)
+    expect(cfg.groupCol).toBe('Genotype')
+    expect(cfg.timeOrder).not.toContain('Week 0')
+    expect(wl.birthDateConflicts?.map((c) => [c.id, c.used])).toEqual([['KX7.1 LF', '2026-01-05']])
+    expect(cfg.timeCol).toBe('Age (weeks)')
+    const z = wl.headers.indexOf('Weight z vs reference (SD)')
+    expect(wl.rows.filter((r) => typeof r[z] === 'number')).toHaveLength(13)
+
+    // Open Field: the Animals sheet gives genotype and sex ahead of the PAS labels
+    setProgram('openfield')
+    const ds = mergeTables([...pickTables([pasRuns()]), ...pickTables(sheets())])
+    const h = (n: string) => ds.headers.indexOf(n)
+    const row = ds.rows.find((r) => r[h('Animal ID')] === 'KX7.2 LF' && r[h('Test date')] === '2026-03-02')!
+    expect(row[h('Genotype')]).toBe('Mut/Mut')
+    expect(row[h(LABEL_SOURCE_COL)]).toBe('Animal key')
+    expect(row[h(AGE_AT_TEST_COL)]).toBe(49)
+    expect(row[h(WEIGHT_COL)]).toBe(18)
+    expect(autoConfig(ds).groupOrder.sort()).toEqual(['Mut/Mut', 'WT'])
   })
 })

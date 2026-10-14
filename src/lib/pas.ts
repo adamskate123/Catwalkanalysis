@@ -596,7 +596,8 @@ export function pasAugment(headers: string[], rows: Cell[][], role: (h: string) 
   if (pci < 0 || psi < 0 || ri < 0 || ai < 0) return null
   const notices: string[] = []
   const t = (c: Cell) => (c === null ? '' : String(c).trim())
-  let gi = headers.findIndex((h) => h !== PAS_GENOTYPE_COL && role(h) === 'group')
+  // The key's genotype column; one with a single value throughout (e.g. "Untreated") doesn't group anything.
+  let gi = headers.findIndex((h, i) => h !== PAS_GENOTYPE_COL && role(h) === 'group' && new Set(rows.map((r) => t(r[i])).filter(Boolean)).size >= 2)
   let si = headers.findIndex((h) => h !== PAS_SEX_COL && role(h) === 'sex')
   const keyGroup = gi >= 0
   const keySex = si >= 0
@@ -721,7 +722,7 @@ export function pasAugment(headers: string[], rows: Cell[][], role: (h: string) 
     )
   } else {
     notices.push(
-      `Genotype and sex come from the PAS chamber labels (each animal's most common label, e.g. "AA F" → genotype AA, female). Load an animal key such as your weights workbook to use its genotypes instead; PAS labels then fill in only the animals the key doesn't list.`,
+      `Genotype and sex come from the PAS chamber labels (each animal's most common label, e.g. "AA F" → genotype AA, female), as no animal key with a genotype column was loaded. A key listing each animal's genotype and sex takes precedence; PAS labels then fill in only the animals it doesn't list.`,
     )
   }
   return { notices }

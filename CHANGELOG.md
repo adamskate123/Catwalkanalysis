@@ -5,13 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [2.9.1] - 2026-10-14
 
+Tested with a real project weight log (one row per weigh-in: Animal ID, Date of Birth, Treatment, Date Observed, Performed By, Weight (g); 177 animals, 1,311 weigh-ins) together with SDI PAS, CatWalk and rotarod data.
+
 ### Fixed
 
-- **Weights files are also used as an animal key.** A weights file with one row per weigh-in (animal ID, weight, weigh date) that also lists each animal's date of birth, genotype or sex used to add only body weight. Now the columns that stay the same for each animal are joined like an animal key as well, so the date of birth gives each run's age at test and the age windows, and genotype and sex group the animals (for SDI PAS data, ahead of the PAS chamber labels).
-  - Columns the data already have are not repeated.
+- **Weights files are also used as an animal key.** A weights file with one row per weigh-in used to add only body weight. Now its columns that describe each animal (date of birth, genotype, sex) are joined like an animal key as well. The date of birth gives each run's age at test and the age windows, and genotype and sex group the animals (for SDI PAS data, ahead of the PAS chamber labels).
+  - Columns the data already have are not repeated, and a column with one value throughout (e.g. Treatment = "Untreated") is skipped, so it can't become the group.
   - An animal whose rows disagree on a column (e.g. a tag reused in another colony) is left blank for that column.
-- **Weigh-ins are matched by date** when the weights file has weigh dates and the data have test dates (e.g. PAS runs): each run takes the animal's weigh-in nearest its test date, within 7 days.
-- When two keys both give dates of birth (or genotypes) for different animals, they fill one column instead of adding a second "(key)" copy, so age windows see every animal.
+- **Weigh-ins are matched to each test, never averaged over an animal's whole history.**
+  - With a test date (a dated timepoint such as a PAS run date, a test-date column, or the date in a CatWalk experiment name): the weigh-in nearest that date, within 7 days.
+  - With age timepoints and a date of birth: the mean of the weigh-ins at ages in that window. Plain ages that step up ("50 days", "100 days", …) are read as consecutive bins (≤50, 51–100, …), as in age-binned Prism sheets.
+  - A weekly weight log in an animal key fills the rows the weights file leaves without a weight.
+- **Dates of birth that differ between rows** (usually a typo in one row, often the year): the date on most of the animal's rows is used everywhere (age at test, age windows, Weight Lab weeks of age). The animals are listed under Setup → Data checks with every date and its number of rows, so the file can be corrected.
+- **Several keys fill one column.** When two files give dates of birth (or genotypes) for different animals, they fill one column whatever each file calls it ("DOB", "Date of Birth"), so age windows see every animal.
+- **IDs that differ only in spacing match** ("TA1.2 all4" and "TA1.2 all 4").
+- **An "Animals" sheet in a workbook** (animal ID with genotype/group and/or sex, no date columns) is read as that workbook's animal key, e.g. next to a one-row-per-weigh-in weights sheet.
+- **Weight Lab reads "Date Observed"** (and "Observation date") as the weigh date, so a one-row-per-weigh-in log keeps every weigh-in and gets ages and weeks of age.
+- Animals that an animal key or weights file doesn't list are named in a note, so IDs written differently in two files (e.g. "2R" vs "RR") can be corrected.
 
 ## [2.9.0] - 2026-10-13
 
