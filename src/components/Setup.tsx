@@ -65,7 +65,9 @@ export function Setup({ ds, measures, cfg, setCfg, opt, setOpt, colorOf, onLearn
 
   return (
     <>
-      {ds.checks && ds.checks.length > 0 && <DataChecksCard checks={ds.checks} cfg={cfg} update={update} />}
+      {(ds.checks?.length || ds.birthDateConflicts?.length) ? (
+        <DataChecksCard checks={ds.checks ?? []} birthDates={ds.birthDateConflicts} cfg={cfg} update={update} />
+      ) : null}
       <div className="card">
         <h2>Columns</h2>
         <p className="small muted">These were detected automatically. Change them if the guess is wrong.</p>

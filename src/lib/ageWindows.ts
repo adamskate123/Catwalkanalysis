@@ -55,7 +55,7 @@ export interface AgeInfo {
 }
 
 const DOB = /^(dob|d\.?o\.?b\.?|date of birth|birth ?date|birthday|born)$/i
-const TEST_DATE = /test(ing)? ?date|date (of )?test|date tested|test ?day|testdate|^weigh(ing)?[- ]?(in )?date$/i
+const TEST_DATE = /test(ing)? ?date|date (of )?test|date tested|test ?day|testdate|^weigh(ing)?[- ]?(in )?date$|^date observed$/i
 
 export function windowsOf(s: Pick<AgeWindowSettings, 'mode' | 'values' | 'tolerance'>): AgeWindow[] {
   const vals = [...new Set(s.values.filter((v) => Number.isFinite(v) && v > 0))].sort((a, b) => a - b)
@@ -118,15 +118,21 @@ export function addAgeColumns(
   const expi = headers.findIndex((h) => /^experiment$/i.test(h.trim()))
   const agei = headers.findIndex((h) => /^age\b/i.test(h.trim()) && h !== AGE_AT_TEST_COL)
 
+  // Each animal's date of birth: the one on most of its rows (a typo in one row is outvoted).
   const fileBirthDates: Record<string, string> = {}
   const ids = new Set<string>()
+  const dobCounts = new Map<string, Map<number, number>>()
   for (const r of rows) {
     const id = text(r[idx])
     if (!id) continue
     ids.add(id)
     const d = dobi >= 0 ? parseDay(r[dobi]) : null
-    if (d !== null && !fileBirthDates[id]) fileBirthDates[id] = iso(d)
+    if (d === null) continue
+    const m = dobCounts.get(id) ?? new Map<number, number>()
+    m.set(d, (m.get(d) ?? 0) + 1)
+    dobCounts.set(id, m)
   }
+  for (const [id, m] of dobCounts) fileBirthDates[id] = iso([...m].sort((a, b) => b[1] - a[1])[0][0])
   const entered = settings?.birthDates ?? {}
   const dobOf = (id: string) => parseDay(entered[id] ?? fileBirthDates[id] ?? null)
 

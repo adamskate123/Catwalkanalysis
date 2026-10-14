@@ -20,6 +20,8 @@ import {
   type PasInterval,
   type TableReader,
 } from './pas'
+import { unpackEvents } from './tracks'
+import { trackRuns } from './trackRuns'
 
 afterEach(() => setProgram('catwalk'))
 
@@ -354,3 +356,35 @@ describe('instruction sheets', () => {
     expect(tables[0].sheet).toBe('Animals')
   })
 })
+
+describe('PAS movement tracks', () => {
+  it('keeps each run\'s positions and rearing, and carries them into the dataset', () => {
+    const d = db()
+    d.rears = new Map([['S2\u00001', [15, 3, 8, 3010, 5, 8]]])
+    const sheet = pasSheet(d, 'PASdata_001.mdb')
+    const tracks = sheet.tracks!
+    expect(tracks.centre).toHaveLength(100)
+    expect(Object.keys(tracks.runs)).toHaveLength(12)
+    const run = tracks.runs['S2 · chamber 1']
+    expect(run.secs).toBe(1200)
+    expect(run.intervalSecs).toBe(300)
+    const ev = unpackEvents(run)
+    expect([...ev.rear].filter(Boolean)).toHaveLength(2)
+    expect(ev.t.every((t, i) => i === 0 || t >= ev.t[i - 1])).toBe(true)
+    // The run that stopped early covers its recorded time only
+    expect(tracks.runs['S1 · chamber 1'].secs).toBe(300 + 60)
+
+    setProgram('openfield')
+    const ds = mergeTables(pickTables([sheet]))
+    expect(Object.keys(ds.tracks!.runs)).toHaveLength(12)
+    const cfg = autoConfig(ds)
+    const runs = trackRuns(ds, cfg)
+    expect(runs).toHaveLength(12)
+    const r = runs.find((x) => x.recording === 'S2 · chamber 3')!
+    expect(r).toMatchObject({ subject: 'KX9.2 LF', group: 'WT', time: '2026-02-02', excluded: false })
+    expect(runs.find((x) => x.recording === 'S1 · chamber 1')!.excluded).toBe(true)
+    // Excluded groups are left out
+    expect(trackRuns(ds, { ...cfg, excludedGroups: ['WT'] }).some((x) => x.group === 'WT')).toBe(false)
+  })
+})
+

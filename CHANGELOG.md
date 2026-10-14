@@ -3,6 +3,46 @@
 All notable changes to Behavior Lab (formerly Gait Lab · CatWalk Analyzer) are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [2.10.0] - 2026-10-14
+
+Tested with a real SDI PAS database (558 runs, about 1 million position events).
+
+### Added
+
+- **Tracks tab** (Open Field Lab, SDI PAS databases). The app now keeps each run's beam positions (every move to a new beam and every rearing, to 0.1 s) with the experiment, about 4 bytes per event, so tracks can be redrawn without reloading the database.
+  - **Where each group spends its time**, at the selected timepoint or age window:
+    - *Time in place*: one heatmap per group of the share of session time at each beam position. Each animal's map is averaged first, so every animal counts once. Square-root colour scale, so the walls and corners don't wash out the rest of the arena.
+    - *All tracks*: every animal's track drawn faintly, so busy routes build up (the classic overhead view).
+    - *Difference from control*: each group's map minus the control group's, in percentage points (blue = less time, red = more).
+  - **One animal's track**: pick an animal and a run. The track is coloured by 5-min interval, with rearing as dots. **Replay** it with play/pause, 1–120× speed and a time slider, with the animal's position marked as it moves.
+  - Positions are known to the nearest beam (2.5 cm), so tracks are straight steps between beams. A small fixed jitter, within the half-beam the position is uncertain by, spreads repeated passes like a video track.
+  - Runs left out under Setup → Data checks, excluded groups and filters are left out of the group maps.
+  - Every map and track exports as SVG/PNG with its title, legend, colour scale and caption. *Download every graph* includes the group maps for each timepoint.
+
+### Changed
+
+- Exported heatmaps can carry their own colour-scale labels (e.g. "% of time") instead of always "Hedges g".
+
+## [2.9.1] - 2026-10-14
+
+Tested with a real project weight log (one row per weigh-in: Animal ID, Date of Birth, Treatment, Date Observed, Performed By, Weight (g); 177 animals, 1,311 weigh-ins) together with SDI PAS, CatWalk and rotarod data.
+
+### Fixed
+
+- **Weights files are also used as an animal key.** A weights file with one row per weigh-in used to add only body weight. Now its columns that describe each animal (date of birth, genotype, sex) are joined like an animal key as well. The date of birth gives each run's age at test and the age windows, and genotype and sex group the animals (for SDI PAS data, ahead of the PAS chamber labels).
+  - Columns the data already have are not repeated, and a column with one value throughout (e.g. Treatment = "Untreated") is skipped, so it can't become the group.
+  - An animal whose rows disagree on a column (e.g. a tag reused in another colony) is left blank for that column.
+- **Weigh-ins are matched to each test, never averaged over an animal's whole history.**
+  - With a test date (a dated timepoint such as a PAS run date, a test-date column, or the date in a CatWalk experiment name): the weigh-in nearest that date, within 7 days.
+  - With age timepoints and a date of birth: the mean of the weigh-ins at ages in that window. Plain ages that step up ("50 days", "100 days", …) are read as consecutive bins (≤50, 51–100, …), as in age-binned Prism sheets.
+  - A weekly weight log in an animal key fills the rows the weights file leaves without a weight.
+- **Dates of birth that differ between rows** (usually a typo in one row, often the year): the date on most of the animal's rows is used everywhere (age at test, age windows, Weight Lab weeks of age). The animals are listed under Setup → Data checks with every date and its number of rows, so the file can be corrected.
+- **Several keys fill one column.** When two files give dates of birth (or genotypes) for different animals, they fill one column whatever each file calls it ("DOB", "Date of Birth"), so age windows see every animal.
+- **IDs that differ only in spacing match** ("TA1.2 all4" and "TA1.2 all 4").
+- **An "Animals" sheet in a workbook** (animal ID with genotype/group and/or sex, no date columns) is read as that workbook's animal key, e.g. next to a one-row-per-weigh-in weights sheet.
+- **Weight Lab reads "Date Observed"** (and "Observation date") as the weigh date, so a one-row-per-weigh-in log keeps every weigh-in and gets ages and weeks of age.
+- Animals that an animal key or weights file doesn't list are named in a note, so IDs written differently in two files (e.g. "2R" vs "RR") can be corrected.
+
 ## [2.9.0] - 2026-10-13
 
 Tested with a real SDI PAS database (230 MB; 77 sessions, 85 animals, 1.2 million beam events) and a colony weights workbook as the animal key.

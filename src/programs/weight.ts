@@ -145,7 +145,7 @@ function prepare(t: ParsedTable): { table: ParsedTable; notice?: string } {
 }
 
 const DOB = /^(dob|d\.?o\.?b\.?|date of birth|birth ?date|birthday|born)$/i
-const DATE = /^(weigh(ing)?[- ]?(in )?date|date( weighed)?|weighed on)$/i
+const DATE = /^(weigh(ing)?[- ]?(in )?date|date( weighed| observed)?|weighed on|observ(ed|ation) date|date of weigh(ing|-in)?)$/i
 
 /**
  * Adds age at each weigh-in, its week of age (the timepoint), and the z-score and
@@ -162,8 +162,24 @@ function augment(headers: string[], rows: Cell[][], references: ParsedTable[]): 
   const ref = fromFile ?? C57BL6J
   if (wi < 0) return { notices, reference: ref }
 
+  // Each animal's date of birth is the one on most of its rows: a typo in one row (often the year)
+  // would otherwise give that weigh-in a wrong age. The conflicts are listed under Setup → Data checks.
+  const idi = headers.indexOf(ANIMAL_COL) >= 0 ? headers.indexOf(ANIMAL_COL) : headers.findIndex((h) => genericMetaRole(h) === 'subject')
+  const usualDob = new Map<string, number>()
+  if (dobi >= 0 && idi >= 0) {
+    const counts = new Map<string, Map<number, number>>()
+    for (const r of rows) {
+      const id = String(r[idi] ?? '').trim().toLowerCase()
+      const d = parseDay(r[dobi])
+      if (!id || d === null) continue
+      const m = counts.get(id) ?? new Map<number, number>()
+      m.set(d, (m.get(d) ?? 0) + 1)
+      counts.set(id, m)
+    }
+    for (const [id, m] of counts) usualDob.set(id, [...m].sort((a, b) => b[1] - a[1])[0][0])
+  }
   const ages = rows.map((r) => {
-    const birth = dobi >= 0 ? parseDay(r[dobi]) : null
+    const birth = (idi >= 0 ? usualDob.get(String(r[idi] ?? '').trim().toLowerCase()) : undefined) ?? (dobi >= 0 ? parseDay(r[dobi]) : null)
     const day = datei >= 0 ? parseDay(r[datei]) : null
     return birth !== null && day !== null && day >= birth ? day - birth : null
   })

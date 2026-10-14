@@ -7,6 +7,7 @@ import { program, roleOf } from '../programs'
 import { readPrismProject, reshapeTable, type ImportOptions } from './importers'
 import { RECORDING_COL, readPasFile } from './pas'
 import { collectChecks, type DataCheck } from './dataChecks'
+import { mergeTrackSets, type TrackSet } from './tracks'
 
 /** Sentences (instructions on a "How to use" sheet) are never parameter names. */
 const matchColumn = (name: string) => (name.length > 100 || name.split(/\s+/).length > 14 ? null : program().matchColumn(name))
@@ -20,6 +21,8 @@ export interface RawSheet {
   cells: Cell[][]
   /** Messages from the importer (e.g. sheets it skipped), shown when the file is loaded. */
   notes?: string[]
+  /** Movement tracks (SDI PAS databases), carried through to the dataset. */
+  tracks?: TrackSet
 }
 
 export interface ParsedTable {
@@ -30,6 +33,8 @@ export interface ParsedTable {
   rows: Cell[][]
   /** Title line above the header row, if any (e.g. the name of a reference table). */
   title?: string
+  /** Movement tracks (SDI PAS databases), by recording. */
+  tracks?: TrackSet
 }
 
 export interface ColumnInfo {
@@ -213,6 +218,7 @@ export function detectTable(sheet: RawSheet): ParsedTable | null {
     headerRow: bestRow,
     headers: headers.filter((_, i) => keep[i]),
     rows: rows.map((r) => r.filter((_, i) => keep[i])),
+    ...(sheet.tracks ? { tracks: sheet.tracks } : {}),
   }
 }
 
@@ -235,8 +241,23 @@ export function pickTables(sheets: RawSheet[], opts: ImportOptions = {}): Parsed
         })
     : []
   if (max === 0) return [...tables.slice(0, 1), ...refs.filter((r) => r !== tables[0])]
-  // keep sheets that have at least half as many recognised columns as the best one
-  return [...scored.filter((x) => x.s >= max / 2).map((x) => x.t), ...refs]
+  // keep sheets that have at least half as many recognised columns as the best one, and an
+  // animal list in the same workbook (e.g. an "Animals" sheet next to the weights) as its key
+  const data = scored.filter((x) => x.s >= max / 2).map((x) => x.t)
+  const animalLists = scored.filter((x) => x.s === 0 && isAnimalList(x.t)).map((x) => x.t)
+  return [...data, ...animalLists, ...refs]
+}
+
+/** A sheet listing animals: an ID column with a group (genotype) or sex column, and no date-headed columns. */
+function isAnimalList(t: ParsedTable): boolean {
+  const roles = t.headers.map((h) => metaRole(h))
+  return (
+    t.rows.length >= 2 &&
+    roles.includes('subject') &&
+    (roles.includes('group') || roles.includes('sex')) &&
+    !t.headers.some((h) => parseDay(h) !== null) &&
+    !isReferenceTable(t)
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +298,10 @@ export interface Dataset {
   reference?: WeightReference | null
   /** Runs flagged on import for review (Setup → Data checks). */
   checks?: DataCheck[]
+  /** Animals whose dates of birth differ between rows of a weights file (Setup → Data checks). */
+  birthDateConflicts?: BirthDateConflict[]
+  /** Movement tracks by recording (SDI PAS databases; Tracks tab). */
+  tracks?: TrackSet
 }
 
 export const SOURCE_COL = 'Source file'
@@ -435,34 +460,45 @@ export function mergeTables(input: ParsedTable[], opts: MergeOptions = {}): Data
   const keyCols = new Set<string>()
   let keyWeights: Cell[] | null = null
   let keyWeightFile = ''
-  for (const kt of mergeKeyTables(keyTables)) {
+  // A weights file also describes its animals (date of birth, genotype, sex): it doubles as an animal key.
+  const weightKeys = weightTables.map((t) => weightKeyTable(t, headers)).filter((t): t is ParsedTable => t !== null)
+  for (const kt of [...mergeKeyTables(keyTables), ...weightKeys]) {
     const label = kt.sheet ? `${kt.file} › ${kt.sheet}` : kt.file
-    const j = joinKey(headers, rows, kt, opts.keyChoices?.[label], !weightTables.length && !keyWeights && !headers.includes(WEIGHT_COL))
+    const j = joinKey(headers, rows, kt, opts.keyChoices?.[label], !keyWeights && !headers.includes(WEIGHT_COL))
     if (!j) continue
     keys.push(j.info)
-    for (const h of j.info.added) keyCols.add(h)
-    headers.push(...j.info.added)
-    rows.forEach((r, i) => r.push(...j.values[i]))
+    // A column an earlier key already added (e.g. DOB from a second key) fills its gaps instead of repeating.
+    const fresh: number[] = []
+    j.info.added.forEach((h, k) => {
+      const base = h.replace(/ \(key\)$/, '')
+      // Dates of birth fill one column whatever each file calls it ("DOB", "Date of Birth").
+      const bi = keyCols.has(base) ? headers.indexOf(base) : isDobName(base) ? headers.findIndex((x) => keyCols.has(x) && isDobName(x)) : -1
+      if (bi < 0) return void fresh.push(k)
+      rows.forEach((r, i) => {
+        if (r[bi] === null && j.values[i][k] !== null) r[bi] = j.values[i][k]
+      })
+    })
+    for (const k of fresh) keyCols.add(j.info.added[k])
+    headers.push(...fresh.map((k) => j.info.added[k]))
+    rows.forEach((r, i) => r.push(...fresh.map((k) => j.values[i][k])))
     if (j.weights) {
       keyWeights = j.weights
       keyWeightFile = j.info.file
     }
   }
+  // Weights files first; a weekly weight log in an animal key fills the rows they leave without a weight.
+  const w = weightTables.length ? joinWeights(headers, rows, weightTables) : null
+  if (w) notices.push(w.notice)
   if (keyWeights) {
-    headers.push(WEIGHT_COL)
-    rows.forEach((r, i) => r.push(keyWeights![i]))
-    const n = keyWeights.filter((w) => w !== null).length
-    notices.push(
-      `Body weight from ${keyWeightFile} was added to ${n} of ${rows.length} runs, using each animal's weigh-in nearest the test date (within ${WEIGH_WINDOW_DAYS} days).${n < rows.length ? ` ${rows.length - n} runs had no weigh-in that close; log a weight for those test days to include them.` : ''} Weight appears as a parameter and can be used as a covariate (Setup → Statistics).`,
-    )
+    const n = keyWeights.filter((v, i) => v !== null && (!w || w.values[i] === null)).length
+    if (!w || n)
+      notices.push(
+        `Body weight from ${keyWeightFile} was added to ${n} of ${rows.length} runs${w ? ' that the weights file left without a weight' : ''}, using each animal's weigh-in nearest the test date (within ${WEIGH_WINDOW_DAYS} days).${!w && n < rows.length ? ` ${rows.length - n} runs had no weigh-in that close; log a weight for those test days to include them.` : ''} Weight appears as a parameter and can be used as a covariate (Setup → Statistics).`,
+      )
   }
-  if (weightTables.length) {
-    const w = joinWeights(headers, rows, weightTables)
-    if (w) {
-      headers.push(WEIGHT_COL)
-      rows.forEach((r, i) => r.push(w.values[i]))
-      notices.push(w.notice)
-    }
+  if (w || keyWeights) {
+    headers.push(WEIGHT_COL)
+    rows.forEach((r, i) => r.push(w?.values[i] ?? keyWeights?.[i] ?? null))
   }
   // Programs may derive columns of their own (e.g. Weight Lab: age, week, reference z-score).
   const extra = program().augment?.(headers, rows, referenceTables)
@@ -473,7 +509,26 @@ export function mergeTables(input: ParsedTable[], opts: MergeOptions = {}): Data
   // The age window is a timepoint like the instrument's own.
   for (const c of columns) if (c.name === AGE_WINDOW_COL) c.meta = 'time'
   const checks = collectChecks(headers, rows)
-  return { headers, rows, columns, sources, keys, notices, ageInfo: age.info, valueOrder: age.valueOrder, reference: extra?.reference ?? null, checks }
+  // Weights files (and data such as a weight log in Weight Lab) whose dates of birth differ between an animal's rows
+  const dobConflicts = [...weightTables, ...main].flatMap(birthDateConflicts)
+  if (dobConflicts.length)
+    notices.push(
+      `${dobConflicts.length} animal${dobConflicts.length === 1 ? '' : 's'} in the weights file have more than one date of birth (usually a typo in one row); the date on most of each animal's rows is used. They are listed under Setup → Data checks.`,
+    )
+  return {
+    headers,
+    rows,
+    columns,
+    sources,
+    keys,
+    notices,
+    ageInfo: age.info,
+    valueOrder: age.valueOrder,
+    reference: extra?.reference ?? null,
+    checks,
+    birthDateConflicts: dobConflicts,
+    tracks: mergeTrackSets(input.map((t) => t.tracks)),
+  }
 }
 
 export const WEIGHT_COL = 'Body weight (g)'
@@ -509,11 +564,125 @@ export function isWeightTable(t: ParsedTable): boolean {
 }
 
 /**
+ * The animals described in a weights file: its columns that stay the same for
+ * each animal (date of birth, genotype, sex, …), one row per animal, for joining
+ * as an animal key. Weights, weigh dates and timepoints are left out, and so are
+ * columns the data already have. Null when nothing new remains.
+ */
+export function weightKeyTable(t: ParsedTable, dataHeaders: string[]): ParsedTable | null {
+  const si = t.headers.findIndex((h) => metaRole(h) === 'subject')
+  if (si < 0) return null
+  const byAnimal = new Map<string, Cell[][]>()
+  for (const r of t.rows) {
+    const id = norm(r[si])
+    if (!id) continue
+    if (!byAnimal.has(id)) byAnimal.set(id, [])
+    byAnimal.get(id)!.push(r)
+  }
+  if (byAnimal.size < 2) return null
+  const cols = t.headers
+    .map((h, i) => ({ h, i }))
+    .filter(({ h, i }) => {
+      if (i === si) return true
+      const role = metaRole(h)
+      if (isWeightName(h) || dataHeaders.includes(h) || role === 'time' || role === 'run' || role === 'trial' || role === 'nruns') return false
+      // One value for every animal (e.g. "Untreated" throughout) says nothing about the animals.
+      if (new Set(t.rows.map((r) => norm(r[i])).filter(Boolean)).size < 2) return false
+      // Dates of birth are kept whatever the typos (the most common date is used; see birthDateConflicts).
+      if (isDobName(h)) return true
+      // Otherwise the same value on all of an animal's rows, for (nearly) every animal.
+      let filled = 0
+      let mixed = 0
+      for (const rs of byAnimal.values()) {
+        const vals = new Set(rs.map((r) => norm(r[i])).filter(Boolean))
+        if (vals.size) filled++
+        if (vals.size > 1) mixed++
+      }
+      return filled > 0 && mixed <= Math.max(1, Math.floor(byAnimal.size * 0.1))
+    })
+  if (cols.length < 2) return null
+  // An animal whose rows disagree (e.g. a tag reused in another colony) gets no value for that
+  // column; for the date of birth, the date on most of its rows.
+  const rows = [...byAnimal.values()].map((rs) =>
+    cols.map(({ h, i }) => {
+      const vals = rs.map((r) => r[i]).filter((c) => c !== null)
+      if (isDobName(h)) return mostCommon(vals)
+      return new Set(vals.map(norm)).size === 1 ? vals[0] : null
+    }),
+  )
+  return { file: t.file, sheet: t.sheet, headerRow: 0, headers: cols.map(({ h }) => h), rows }
+}
+
+const isDobName = (h: string) => /^(dob|d\.?o\.?b\.?|date of birth|birth ?date|birthday|born)$/i.test(h.trim())
+
+/** The most frequent value (by its text); on a tie, the one seen first. */
+function mostCommon(vals: Cell[]): Cell {
+  const n = new Map<string, { c: Cell; k: number }>()
+  for (const v of vals) {
+    const e = n.get(norm(v)) ?? { c: v, k: 0 }
+    e.k++
+    n.set(norm(v), e)
+  }
+  let best: { c: Cell; k: number } | null = null
+  for (const e of n.values()) if (!best || e.k > best.k) best = e
+  return best?.c ?? null
+}
+
+/** An animal whose rows in a weights file give different dates of birth. */
+export interface BirthDateConflict {
+  file: string
+  id: string
+  /** The date used (on most rows) and every date with its number of rows. */
+  used: string
+  dates: { date: string; rows: number }[]
+}
+
+/** Animals whose dates of birth differ between rows of a weights or key file (usually a typo in one row). */
+export function birthDateConflicts(t: ParsedTable): BirthDateConflict[] {
+  const si = t.headers.findIndex((h) => metaRole(h) === 'subject')
+  const di = t.headers.findIndex(isDobName)
+  if (si < 0 || di < 0) return []
+  const byAnimal = new Map<string, { id: string; dates: Map<string, number> }>()
+  for (const r of t.rows) {
+    const id = norm(r[si])
+    const d = parseDay(r[di])
+    if (!id || d === null) continue
+    const e = byAnimal.get(id) ?? { id: String(r[si]).trim(), dates: new Map<string, number>() }
+    const iso = new Date(d * 864e5).toISOString().slice(0, 10)
+    e.dates.set(iso, (e.dates.get(iso) ?? 0) + 1)
+    byAnimal.set(id, e)
+  }
+  const out: BirthDateConflict[] = []
+  for (const { id, dates } of byAnimal.values()) {
+    if (dates.size < 2) continue
+    const list = [...dates].map(([date, rows]) => ({ date, rows })).sort((a, b) => b.rows - a.rows)
+    out.push({ file: t.sheet ? `${t.file} › ${t.sheet}` : t.file, id, used: list[0].date, dates: list })
+  }
+  return out.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
+}
+
+/** Weigh-in dates in a weights file: a column of dates that isn't the date of birth. */
+function weighDateIndex(t: ParsedTable): number {
+  return t.headers.findIndex((h, i) => !/dob|birth|born/i.test(h) && metaRole(h) !== 'time' && parseDayShare(t.rows.map((r) => r[i])) >= 0.8)
+}
+
+/** Test dates in the data: a timepoint column holding dates, or a test-date column. */
+function testDateIndex(headers: string[], rows: Cell[][]): number {
+  const t = headers.findIndex((h) => metaRole(h) === 'time' && !/description/i.test(h))
+  if (t >= 0 && rows.some((r) => parseDay(r[t]) !== null)) return t
+  return headers.findIndex((h, i) => /test(ing)?\s*date|date\s*(of\s*)?test|date tested/i.test(h) && rows.some((r) => parseDay(r[i]) !== null))
+}
+
+/**
  * Adds body weight to each data row from weight tables, matched by animal ID
  * and, when both have one, by timepoint (and sex). Several weighings in the
- * same window are averaged.
+ * same window are averaged. When the weights have weigh-in dates and the data
+ * have test dates, each run takes the animal's weigh-in nearest its test date
+ * (within WEIGH_WINDOW_DAYS).
  */
 function joinWeights(headers: string[], rows: Cell[][], tables: ParsedTable[]): { values: Cell[]; notice: string } | null {
+  const byDate = joinWeightsByDate(headers, rows, tables)
+  if (byDate) return byDate
   const role = (hs: string[], r: MetaRole) => hs.findIndex((h) => metaRole(h) === r)
   const di = role(headers, 'subject') >= 0 ? role(headers, 'subject') : role(headers, 'trial')
   if (di < 0) return null
@@ -670,12 +839,17 @@ function joinKey(
       .filter((e) => e.id && kcs.every((c) => kt.rows[e.ri][c] !== null) && kt.rows[e.ri].filter((c) => c !== null).length > 1)
     const exact = new Map<string, number>()
     for (const e of entries) exact.set(e.id, e.ri)
+    // "TA1.2 all4" and "TA1.2 all 4" are the same animal: IDs also match ignoring spaces, when unambiguous.
+    const squeeze = (id: string) => id.replace(/\s+/g, '')
+    const compact = new Map<string, number | null>()
+    for (const e of entries) compact.set(squeeze(e.id), compact.has(squeeze(e.id)) && compact.get(squeeze(e.id)) !== e.ri ? null : e.ri)
     const map = new Map<string, number>()
     let exactHits = 0
     let fuzzyHits = 0
     for (const v of new Set(rows.map((r) => norm(r[dc])).filter(Boolean))) {
-      if (exact.has(v)) {
-        map.set(v, exact.get(v)!)
+      const ri = exact.get(v) ?? compact.get(squeeze(v))
+      if (ri !== undefined && ri !== null) {
+        map.set(v, ri)
         exactHits++
         continue
       }
@@ -727,8 +901,7 @@ function joinKey(
     .map((h, i) => ({ h, i, day: parseDay(h) }))
     .filter(({ i, day }) => day !== null && numericShareOf(kt.rows.map((r) => r[i])) >= 0.9 && kt.rows.some((r) => r[i] !== null))
   const weightLog = allowWeight && looksWeight && dateCols.length >= 2
-  const timeIdx = headers.findIndex((h) => metaRole(h) === 'time' && !/description/i.test(h))
-  const dayOf = (r: Cell[]) => (timeIdx >= 0 ? parseDay(r[timeIdx]) : null)
+  const dayOf = testDayOf(headers, rows)
   const dobIdx = kt.headers.findIndex((h) => /^(dob|d\.o\.b\.?|date of birth|birth ?date)$/i.test(h.trim()))
 
   const notes: string[] = []
@@ -771,8 +944,8 @@ function joinKey(
     const age: Cell[] = canAge ? [k && day !== null && parseDay(k[dobIdx]) !== null ? day - parseDay(k[dobIdx])! : null] : []
     return [...age, ...cols.map(({ i }) => (k ? k[i] : null))]
   })
-  if (weightLog && (timeIdx < 0 || !rows.some((r) => dayOf(r) !== null)))
-    notes.push('This is a weekly weight log, but the data have no test dates (Time_Point), so weights could not be matched to a test day.')
+  if (weightLog && !rows.some((r) => dayOf(r) !== null))
+    notes.push('This is a weekly weight log, but the data have no test dates (a dated timepoint, a test-date column or a date in the experiment name), so weights could not be matched to a test day.')
   if (canAge) notes.push(`${AGE_AT_TEST_COL} is calculated from DOB and the test date, not from ages stored in the key (those change with the date the file was opened).`)
   const matchedRows = new Set(map.values())
   return {
@@ -796,6 +969,125 @@ function joinKey(
     },
     values,
     weights: weightLog && weighed ? weights : null,
+  }
+}
+
+/** Each data row's test date: a dated timepoint, a test-date column, or a date in the experiment name. */
+function testDayOf(headers: string[], rows: Cell[][]): (r: Cell[]) => number | null {
+  const td = testDateIndex(headers, rows)
+  const ei = headers.findIndex((h) => /^experiment$/i.test(h.trim()))
+  return (r) => (td >= 0 ? parseDay(r[td]) : null) ?? (ei >= 0 ? dateInName(r[ei]) : null)
+}
+
+/** "TBCD cohort 9-24-2026" → day of 9/24/2026: the date in an experiment name. */
+function dateInName(c: Cell): number | null {
+  const m = /(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/.exec(c === null ? '' : String(c))
+  return m ? parseDay(`${m[1]}/${m[2]}/${m[3]}`) : null
+}
+
+/**
+ * Weights with weigh-in dates. Each data row takes, when its test date is known
+ * (a dated timepoint, a test-date column or a date in the experiment name), the
+ * animal's weigh-in nearest that date within WEIGH_WINDOW_DAYS; when its timepoint
+ * is an age ("100 days", "51-100 days") and the weights give dates of birth, the
+ * mean of the weigh-ins at ages in that window. Plain ages that step up ("50 days",
+ * "100 days", …) are read as consecutive bins, as in age-binned Prism sheets
+ * (≤50, 51–100, …). Never an average of all of an animal's weigh-ins.
+ */
+function joinWeightsByDate(headers: string[], rows: Cell[][], tables: ParsedTable[]): { values: Cell[]; notice: string } | null {
+  if (!tables.every((t) => weighDateIndex(t) >= 0)) return null
+  const ids = new Set(tables.flatMap((t) => t.rows.map((r) => norm(r[t.headers.findIndex((h) => metaRole(h) === 'subject')]))))
+  // The data column holding the IDs the weights use: the animal column, or the trial name (CatWalk: the ear tag).
+  const di = headers
+    .map((h, i) => ({ i, role: metaRole(h) }))
+    .filter(({ role }) => role === 'subject' || role === 'trial')
+    .map(({ i }) => ({ i, hits: new Set(rows.map((r) => norm(r[i])).filter((v) => ids.has(v))).size }))
+    .sort((a, b) => b.hits - a.hits)[0]?.i ?? -1
+  if (di < 0) return null
+  const testDay = testDayOf(headers, rows)
+  const hasTestDays = rows.some((r) => testDay(r) !== null)
+
+  // Weigh-ins per animal, with the age at weighing when the animal's date of birth is known
+  const byAnimal = new Map<string, { day: number; w: number; age: number | null }[]>()
+  for (const t of tables) {
+    const wi = t.headers.findIndex(isWeightName)
+    const ti = t.headers.findIndex((h) => metaRole(h) === 'subject')
+    const wd = weighDateIndex(t)
+    const bi = t.headers.findIndex(isDobName)
+    const dob = new Map<string, number | null>()
+    if (bi >= 0) {
+      const all = new Map<string, Cell[]>()
+      for (const r of t.rows) if (norm(r[ti])) all.set(norm(r[ti]), [...(all.get(norm(r[ti])) ?? []), r[bi]])
+      for (const [id, vals] of all) dob.set(id, parseDay(mostCommon(vals.filter((v) => parseDay(v) !== null))))
+    }
+    for (const r of t.rows) {
+      const w = toNumber(r[wi])
+      const day = parseDay(r[wd])
+      const id = norm(r[ti])
+      if (w === null || day === null || !id) continue
+      const b = dob.get(id) ?? null
+      if (!byAnimal.has(id)) byAnimal.set(id, [])
+      byAnimal.get(id)!.push({ day, w, age: b === null ? null : day - b })
+    }
+  }
+  if (!byAnimal.size) return null
+
+  // Age windows of the timepoints, for rows without a test date
+  const tc = headers.findIndex((h) => metaRole(h) === 'time' && !/description/i.test(h))
+  const labels = tc >= 0 ? [...new Set(rows.map((r) => (r[tc] === null ? '' : String(r[tc]).trim())).filter(Boolean))] : []
+  const parsed = labels.map((l) => [l, ageWindow(l)] as const).filter((x): x is readonly [string, [number, number]] => x[1] !== null)
+  const window = new Map<string, [number, number]>()
+  let binned = false
+  if (parsed.length && parsed.length === labels.length && /day/i.test(labels.join(' '))) {
+    if (parsed.every(([, w]) => w[0] === w[1])) {
+      const pts = [...new Set(parsed.map(([, w]) => w[0]))].sort((a, b) => a - b)
+      binned = pts.length > 1
+      for (const [l, w] of parsed) {
+        const k = pts.indexOf(w[0])
+        window.set(l, binned ? [k === 0 ? -Infinity : pts[k - 1] + 1, w[0]] : [w[0] - WEIGH_WINDOW_DAYS, w[0] + WEIGH_WINDOW_DAYS])
+      }
+    } else for (const [l, w] of parsed) window.set(l, w)
+  }
+
+  let byDate = 0
+  let byAge = 0
+  const values = rows.map((r) => {
+    const list = byAnimal.get(norm(r[di]))
+    if (!list) return null
+    const day = testDay(r)
+    if (day !== null) {
+      let best: { day: number; w: number } | null = null
+      for (const e of list) {
+        const d = Math.abs(e.day - day)
+        // On a tie, the earlier weigh-in (before the test) wins.
+        if (d <= WEIGH_WINDOW_DAYS && (!best || d < Math.abs(best.day - day) || (d === Math.abs(best.day - day) && e.day < best.day))) best = e
+      }
+      if (best) byDate++
+      return best ? best.w : null
+    }
+    const win = tc >= 0 ? window.get(r[tc] === null ? '' : String(r[tc]).trim()) : undefined
+    if (!win) return null
+    const inWin = list.filter((e) => e.age !== null && e.age >= win[0] && e.age <= win[1])
+    if (!inWin.length) return null
+    byAge++
+    return +(inWin.reduce((a, e) => a + e.w, 0) / inWin.length).toFixed(3)
+  })
+  const files = [...new Set(tables.map((t) => t.file))].join(', ')
+  const n = byDate + byAge
+  const how = [
+    byDate ? `${byAge ? `${byDate} ` : ''}using each animal's weigh-in nearest the test date (within ${WEIGH_WINDOW_DAYS} days)` : '',
+    byAge
+      ? `${byDate ? `${byAge} ` : ''}averaging each animal's weigh-ins at ages within the timepoint's age window${binned ? ` (plain ages are read as consecutive bins, e.g. "${parsed[1]?.[0] ?? parsed[0][0]}" = ${window.get(parsed[1]?.[0] ?? parsed[0][0])![0]}–${window.get(parsed[1]?.[0] ?? parsed[0][0])![1]} days)` : ''}`
+      : '',
+  ].filter(Boolean)
+  return {
+    values,
+    notice:
+      `Body weight from ${files} was added to ${n} of ${rows.length} rows${how.length ? `, ${how.join('; ')}` : ''}.` +
+      (n < rows.length
+        ? ` ${rows.length - n} had no weigh-in that matches${!hasTestDays && !window.size ? ' (the data have no test dates or age timepoints to match weigh-in dates to)' : ''}.`
+        : '') +
+      ' Weight appears as a parameter and can be used as a covariate (Setup → Statistics).',
   }
 }
 

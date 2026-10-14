@@ -357,7 +357,8 @@ export function autoConfig(ds: Dataset): AnalysisConfig {
     const ids = distinctValues(ds, subjectCol)
     if (ids.length && ids.every((v) => /^animal\s*\d+$/i.test(v))) subjectCol = trialCol
   }
-  let groupCol = find('group')
+  // A group column with one value throughout (e.g. "Untreated" from a weights file) can't separate groups.
+  let groupCol = ds.columns.find((c) => c.meta === 'group' && c.distinct >= 2)?.name ?? find('group')
   if (!groupCol && ds.sources.length > 1) groupCol = SOURCE_COL
   // A time column is only useful with 2+ real timepoints (CatWalk writes "Undefined" when none were set).
   const timeCol =

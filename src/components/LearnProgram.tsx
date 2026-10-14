@@ -120,7 +120,9 @@ const CONTENT: Record<Exclude<ProgramId, 'catwalk'>, Content> = {
           movements); an upper row of beams counts <b>rearing</b>. Open Field Lab reads the PAS database (.mdb) directly: it uses PAS's own counts and
           recalculates distance, speed, resting time and centre measures from the logged beam events the way PAS's data reduction does (2.5 cm per beam, a
           pause of 5 s or more counted as resting). Runs that look wrong, such as a run that stopped early, an animal tested twice on one day, or a chamber
-          label that disagrees with the animal key, are listed under Setup → Data checks, where you choose which to leave out.
+          label that disagrees with the animal key, are listed under Setup → Data checks, where you choose which to leave out. The
+          positions logged with each beam break also redraw the animal's path: the Tracks tab shows each group's time-in-place map and every animal's
+          track, and replays a single run.
         </p>
       </>
     ),

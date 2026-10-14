@@ -16,6 +16,7 @@
 // so they can be reviewed and excluded in Setup → Data checks.
 
 import type { Cell, RawSheet } from './parse'
+import { packEvents, type TrackSet } from './tracks'
 
 export const PAS_GENOTYPE_COL = 'Genotype (PAS)'
 export const PAS_SEX_COL = 'Sex (PAS)'
@@ -113,6 +114,8 @@ export interface PasDb {
   restSecs: number
   /** Ambulatory beam events per "session\u0000chamber": flat [t (0.1 s), x, y, interval, event number, …]. */
   events: Map<string, number[]>
+  /** Rearing events per run: flat [t (0.1 s), x, y, …] (the animal's position when it reared). */
+  rears?: Map<string, number[]>
   /** Beam events of any type read from the database. */
   eventCount: number
 }
@@ -365,6 +368,14 @@ export function pasSheet(db: PasDb, file: string): RawSheet {
   const centre = centreZone(db.zones, db.xBeams, db.yBeams)
   let noEvents = 0
   const rows: Cell[][] = []
+  const tracks: TrackSet = {
+    version: 1,
+    beamCm: BEAM_CM,
+    xBeams: db.xBeams,
+    yBeams: db.yBeams,
+    centre: centre ? [...db.zones].filter(([, z]) => z === centre).map(([xy]) => xy) : [],
+    runs: {},
+  }
   for (const r of runs) {
     const len = r.session.intervalSecs * 10
     const bounds = new Map<number, [number, number]>()
@@ -375,6 +386,16 @@ export function pasSheet(db: PasDb, file: string): RawSheet {
     }
     const ev = db.events.get(runKey(r.session.id, r.chamber))
     const red = ev && ev.length ? reduceEvents(ev, bounds, db.zones, centre, db.restSecs) : null
+    // The movement track (positions at each ambulatory break and rearing) for the Tracks tab
+    if (ev && ev.length) {
+      const list: [number, number, number, boolean, number][] = []
+      for (let i = 0; i < ev.length; i += 5) list.push([ev[i], ev[i + 1], ev[i + 2], false, ev[i + 4]])
+      const rs = db.rears?.get(runKey(r.session.id, r.chamber)) ?? []
+      for (let i = 0; i < rs.length; i += 3) list.push([rs[i], rs[i + 1], rs[i + 2], true, Infinity])
+      list.sort((a, b) => a[0] - b[0] || a[4] - b[4])
+      const secs = [...bounds.values()].reduce((a, [t0, t1]) => a + (t1 - t0), 0) / 10
+      tracks.runs[`${r.session.id} · chamber ${r.chamber}`] = { secs, intervalSecs: r.session.intervalSecs, ...packEvents(list.map(([t, x, y, rear]) => [t, x, y, rear])) }
+    }
     if (!red) {
       noEvents++
       r.issues.push('No beam-event log for this run: distance, speed, resting and centre measures are blank')
@@ -454,7 +475,7 @@ export function pasSheet(db: PasDb, file: string): RawSheet {
     const ses = [...new Set(assigned.map((c) => c.session))]
     notes.push(`${file}: ${assigned.length} chambers had an animal assigned but no recorded data (${ses.slice(0, 4).join(', ')}${ses.length > 4 ? ', …' : ''}).`)
   }
-  return { file, sheet: '', cells: [PAS_HEADERS, ...rows], notes }
+  return { file, sheet: '', cells: [PAS_HEADERS, ...rows], notes, tracks: Object.keys(tracks.runs).length ? tracks : undefined }
 }
 
 // ---------------------------------------------------------------------------
@@ -522,6 +543,7 @@ export async function readPasTables(r: TableReader, onProgress?: (share: number)
 
   const perPhase = new Map(sessions.map((s) => [s.id, Math.max(1, s.intervalsPerPhase)]))
   const events = new Map<string, number[]>()
+  const rears = new Map<string, number[]>()
   let eventCount = 0
   if (names.has('Activities')) {
     const t = r.getTable('Activities')
@@ -529,6 +551,13 @@ export async function readPasTables(r: TableReader, onProgress?: (share: number)
     for (let off = 0; off < t.rowCount; off += CHUNK) {
       for (const a of t.getData({ columns, rowOffset: off, rowLimit: CHUNK })) {
         eventCount++
+        if (a.EventType === 'R') {
+          const k = runKey(String(a.SessionId ?? '').trim(), num(a.ChamberNum))
+          let list = rears.get(k)
+          if (!list) rears.set(k, (list = []))
+          list.push(num(a.T), num(a.X), num(a.Y))
+          continue
+        }
         if (a.EventType !== 'A') continue
         const ses = String(a.SessionId ?? '').trim()
         const k = runKey(ses, num(a.ChamberNum))
@@ -552,6 +581,7 @@ export async function readPasTables(r: TableReader, onProgress?: (share: number)
     zones,
     restSecs,
     events,
+    rears,
     eventCount,
   }
 }
@@ -596,7 +626,8 @@ export function pasAugment(headers: string[], rows: Cell[][], role: (h: string) 
   if (pci < 0 || psi < 0 || ri < 0 || ai < 0) return null
   const notices: string[] = []
   const t = (c: Cell) => (c === null ? '' : String(c).trim())
-  let gi = headers.findIndex((h) => h !== PAS_GENOTYPE_COL && role(h) === 'group')
+  // The key's genotype column; one with a single value throughout (e.g. "Untreated") doesn't group anything.
+  let gi = headers.findIndex((h, i) => h !== PAS_GENOTYPE_COL && role(h) === 'group' && new Set(rows.map((r) => t(r[i])).filter(Boolean)).size >= 2)
   let si = headers.findIndex((h) => h !== PAS_SEX_COL && role(h) === 'sex')
   const keyGroup = gi >= 0
   const keySex = si >= 0
@@ -721,7 +752,7 @@ export function pasAugment(headers: string[], rows: Cell[][], role: (h: string) 
     )
   } else {
     notices.push(
-      `Genotype and sex come from the PAS chamber labels (each animal's most common label, e.g. "AA F" → genotype AA, female). Load an animal key such as your weights workbook to use its genotypes instead; PAS labels then fill in only the animals the key doesn't list.`,
+      `Genotype and sex come from the PAS chamber labels (each animal's most common label, e.g. "AA F" → genotype AA, female), as no animal key with a genotype column was loaded. A key listing each animal's genotype and sex takes precedence; PAS labels then fill in only the animals it doesn't list.`,
     )
   }
   return { notices }

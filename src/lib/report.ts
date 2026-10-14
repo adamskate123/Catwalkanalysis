@@ -62,10 +62,15 @@ export function dataWarnings(agg: AggregateResult, tr: TimeResults | undefined, 
         text: `${ds.checks.length} runs look inconsistent (stopped early, tested twice on one day, or labels that disagree); ${out} ${out === 1 ? 'is' : 'are'} left out. Review them under Setup → Data checks.`,
       })
     }
-    // PAS databases: animals missing from the key take their PAS label instead (explained in a notice).
+    // PAS databases: animals missing from the key take their PAS label instead, so this is information, not a fault.
     const pasBackup = ds.headers.includes(LABEL_SOURCE_COL)
     for (const k of ds.keys) {
-      if (k.unmatchedData.length && !pasBackup)
+      if (k.unmatchedData.length && pasBackup)
+        w.push({
+          level: 'info',
+          text: `${k.file} has no entry for ${k.unmatchedData.length} animal${k.unmatchedData.length === 1 ? '' : 's'}: ${k.unmatchedData.join(', ')}. Anything this file supplies (date of birth, weight, genotype) is missing for them; their genotype and sex come from the PAS labels. If an ID is written differently in the two files (e.g. "2R" vs "RR"), correcting one of them joins it.`,
+        })
+      else if (k.unmatchedData.length)
         w.push({
           level: 'warning',
           text: `Animal key ${k.file}: no entry for ${k.unmatchedData.join(', ')} (matched on ${k.dataColumn} = ${k.keyColumn}). Check the join, or pick the ID columns by hand, under Setup → Animal key.`,

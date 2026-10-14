@@ -12,6 +12,7 @@ import { TimeTab } from './tabs/TimeTab'
 import { TrialsTab } from './tabs/TrialsTab'
 import { WeightTab } from './tabs/WeightTab'
 import { WeightRefTab } from './tabs/WeightRefTab'
+import { TracksTab } from './tabs/TracksTab'
 import { SpeedTab } from './tabs/SpeedTab'
 import type { TabProps } from './tabs/types'
 
@@ -89,6 +90,10 @@ function jobs(base: TabProps, only?: Set<string>): Job[] {
     out.push({ scope: prog.trialsTab?.label ?? 'Trials', node: perTrial.map((m) => <TrialsTab key={m.key} {...base} pick={m.key} />) })
   }
   if (prog.id === 'weight') out.push({ scope: 'Reference strain', node: <WeightRefTab {...base} /> })
+  // Group movement maps (time in place, difference from control) per timepoint; single-animal tracks are exported from the tab.
+  if (base.ds.tracks && Object.keys(base.ds.tracks.runs).length)
+    for (const t of times)
+      out.push({ scope: ['Tracks', timeScope(t)].filter(Boolean).join(SCOPE_SEP), time: timeCaption(base.cfg.timeCol, t), node: <TracksTab {...at(t)} exportOnly /> })
   const weight = prog.id === 'weight' ? undefined : base.measures.find((m) => m.def.id === 'body_weight')
   if (weight) {
     for (const t of times)
